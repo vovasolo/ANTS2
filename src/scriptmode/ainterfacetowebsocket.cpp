@@ -258,7 +258,7 @@ const QString AInterfaceToWebSocket::SendObject(const QVariant &object)
     if (object.type() != QMetaType::QVariantMap)
     {
         abort("Argument type of SendObject() method should be object!");
-        return false;
+        return "false";
     }
     QVariantMap vm = object.toMap();
     QJsonObject js = QJsonObject::fromVariantMap(vm);
