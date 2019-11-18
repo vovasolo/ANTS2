@@ -10,7 +10,7 @@
 #include "geometrywindowclass.h"
 #include "exampleswindow.h"
 #include "gainevaluatorwindowclass.h"
-#include "globalsettingsclass.h"
+#include "aglobalsettings.h"
 #include "ascriptwindow.h"
 #include "detectoraddonswindow.h"
 
@@ -23,7 +23,7 @@
 
 
 WindowNavigatorClass::WindowNavigatorClass(QWidget *parent, MainWindow *mw) :
-  QMainWindow(parent),
+  AGuiWindow(parent),
   ui(new Ui::WindowNavigatorClass)
 {
   ui->setupUi(this);
@@ -33,6 +33,7 @@ WindowNavigatorClass::WindowNavigatorClass(QWidget *parent, MainWindow *mw) :
   Qt::WindowFlags windowFlags = (Qt::Window | Qt::CustomizeWindowHint);
   windowFlags |= Qt::WindowCloseButtonHint;
   windowFlags |= Qt::WindowStaysOnTopHint;
+  windowFlags |= Qt::Tool;
   this->setWindowFlags( windowFlags );
 
   MainOn = false;
@@ -76,10 +77,10 @@ void WindowNavigatorClass::SetupWindowsTaskbar()
 
     QWinJumpList* jumplist = new QWinJumpList(this);
     //QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)+"/ants2";
-    jumplist->tasks()->addLink(QString("Base dir"), QDir::toNativeSeparators(MW->GlobSet->AntsBaseDir));
-    jumplist->tasks()->addLink(QString("Last working dir"), QDir::toNativeSeparators(MW->GlobSet->LastOpenDir));
-    if (!MW->GlobSet->LibScripts.isEmpty())
-        jumplist->tasks()->addLink(QString("Script dir"), QDir::toNativeSeparators(MW->GlobSet->LibScripts));
+    jumplist->tasks()->addLink(QString("Base dir"), QDir::toNativeSeparators(MW->GlobSet.AntsBaseDir));
+    jumplist->tasks()->addLink(QString("Last working dir"), QDir::toNativeSeparators(MW->GlobSet.LastOpenDir));
+    if (!MW->GlobSet.LibScripts.isEmpty())
+        jumplist->tasks()->addLink(QString("Script dir"), QDir::toNativeSeparators(MW->GlobSet.LibScripts));
     //jumplist->tasks()->addSeparator();
     jumplist->tasks()->setVisible(true);
 
@@ -179,7 +180,10 @@ void WindowNavigatorClass::setProgress(int percent)
 
 void WindowNavigatorClass::HideWindowTriggered(QString w)
 {
+  if (MW->ShutDown) return;
   if (DisableBSupdate) return;
+
+  //qDebug() << "WinNav: hide win"<<w;
 
   if (w == "main") MainOn = false;
   if (w == "recon") ReconOn = false;
@@ -207,6 +211,8 @@ void WindowNavigatorClass::HideWindowTriggered(QString w)
 
 void WindowNavigatorClass::ShowWindowTriggered(QString w)
 {
+    if (MW->ShutDown) return;
+
   if (w == "main") MainOn = true;
   if (w == "recon") ReconOn = true;
   if (w == "out") OutOn = true;
@@ -270,13 +276,15 @@ void WindowNavigatorClass::BusyOn()
   MW->MIwindow->setEnabled(false);
   MW->ELwindow->setEnabled(false);
   if (MW->GainWindow) MW->GainWindow->setEnabled(false);
-  MW->GraphWindow->setEnabled(false);//OnBusyOn();
+  MW->GraphWindow->OnBusyOn(); //setEnabled(false);
   MW->GeometryWindow->onBusyOn();
   MW->Owindow->setEnabled(false);
 
   emit BusyStatusChanged(true);
 
   time->restart();
+
+  qApp->processEvents();
 }
 
 void WindowNavigatorClass::BusyOff(bool fShowTime)
@@ -316,7 +324,7 @@ void WindowNavigatorClass::BusyOff(bool fShowTime)
   //gain evaluator
   if (MW->GainWindow) MW->GainWindow->setEnabled(true);
 
-  MW->GraphWindow->setEnabled(true);//OnBusyOff();
+  MW->GraphWindow->OnBusyOff();//setEnabled(true);
 
   MW->GeometryWindow->onBusyOff();
 
@@ -386,12 +394,14 @@ void WindowNavigatorClass::on_pbMaxAll_clicked()
     {
       MW->GeometryWindow->showNormal();
       MW->GeometryWindow->raise();
+      MW->GeometryWindow->ShowGeometry();
+      MW->GeometryWindow->DrawTracks();
     }
   if (GraphOn)
-    if (MW->GraphWindow)
     {
       MW->GraphWindow->showNormal();
       MW->GraphWindow->raise();
+      MW->GraphWindow->UpdateRootCanvas();
     }
   if (ScriptOn)
     if (MW->ScriptWindow)
@@ -495,7 +505,7 @@ void WindowNavigatorClass::on_pbGeometry_clicked()
       MW->GeometryWindow->showNormal();
       MW->GeometryWindow->raise();
       MW->GeometryWindow->ShowGeometry();
-      MW->ShowTracks();
+      MW->GeometryWindow->DrawTracks();
     }
   else MW->GeometryWindow->hide();
 

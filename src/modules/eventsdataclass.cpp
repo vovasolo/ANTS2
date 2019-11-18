@@ -3,6 +3,7 @@
 #include "apositionenergyrecords.h"
 #include "apreprocessingsettings.h"
 #include "apmhub.h"
+#include "aeventtrackingrecord.h"
 
 //Root
 #include "TTree.h"
@@ -13,7 +14,7 @@
 #include <QDebug>
 #include <QFile>
 #include <QFileInfo>
-#include <QApplication>
+#include <QtWidgets/QApplication>
 
 EventsDataClass::EventsDataClass(const TString nameID) //nameaddon to make unique hist names in multithread
  : QObject()
@@ -58,13 +59,13 @@ void EventsDataClass::clearResolutionTree()
 
 void EventsDataClass::clear()
 {
-  //    qDebug() << "--->EventsDatHub: Clear";
+  // qDebug() << "--->EventsDatHub: Clear";
   Events.clear();
   TimedEvents.clear();  
   fLoadedEventsHaveEnergyInfo = false;
 #ifdef SIM
-  for (int i=0; i<EventHistory.size(); i++) delete EventHistory[i];
-  EventHistory.clear();
+  for (auto* pr : TrackingHistory) delete pr;
+  TrackingHistory.clear();
   GeneratedPhotonsHistory.clear();
   SimStat->initialize();
 #endif
@@ -146,19 +147,18 @@ void EventsDataClass::purge1e10events()
   bool fTime = ( TimedEvents.size() == Events.size() );
 
   int i = 0;
-  while (i<Scan.size())
-    {
-      //qDebug() << Scan.at(i)->Points[0].r[0] << Scan.at(i)->Points[0].r[1];
-      if (Scan.at(i)->Points[0].r[0] == 1e10 && Scan.at(i)->Points[0].r[1] == 1e10 )
-        {
+  while (i < Scan.size())  // reverse order? ***!!!
+  {
+      if (Scan.at(i)->Points.size() != 0 && Scan.at(i)->Points[0].r[0] == 1e10 && Scan.at(i)->Points[0].r[1] == 1e10 )
+      {
           //qDebug() << "Found one";
           Scan.removeAt(i);
           Events.removeAt(i);
           if (fTime) TimedEvents.removeAt(i);
-        }
+      }
       else
         i++;
-    }
+  }
 }
 
 bool EventsDataClass::BlurReconstructionData(int type, double sigma, TRandom2* RandGen, int igroup)
@@ -365,7 +365,7 @@ void EventsDataClass::squeeze()
     for (int i=0; i<ReconstructionData.size(); i++) ReconstructionData[i].squeeze();
     ReconstructionData.squeeze();
 #ifdef SIM
-    EventHistory.squeeze();
+    TrackingHistory.shrink_to_fit();
     GeneratedPhotonsHistory.squeeze();
 #endif
 }
@@ -435,7 +435,7 @@ int EventsDataClass::getTimeBins() const
 int EventsDataClass::getNumPMs() const
 {
     if (Events.isEmpty()) return 0;
-    return Events[0].size();
+    return Events.first().size();
 }
 
 const QVector<float> *EventsDataClass::getEvent(int iev) const
@@ -445,10 +445,10 @@ const QVector<float> *EventsDataClass::getEvent(int iev) const
 
 const QVector<QVector<float> > *EventsDataClass::getTimedEvent(int iev)
 {
-  return &TimedEvents.at(iev);
+    return &TimedEvents.at(iev);
 }
 
-int EventsDataClass::countGoodEvents(int igroup) //counts events passing all filters
+int EventsDataClass::countGoodEvents(int igroup) const //counts events passing all filters
 {
     if (igroup > ReconstructionData.size()-1)
     {
@@ -476,11 +476,7 @@ void EventsDataClass::prepareStatisticsForEvents(const bool isAllLRFsDefined, in
   AvChi2 = 0;
   AvDeviation = 0;
   bool DoDeviation = (isScanEmpty() || !isReconstructionReady(igroup)) ?  false : true;
-  bool fIsCoG = true;
-  if (igroup>-1 && igroup<RecSettings.size())
-      if (RecSettings.at(igroup).ReconstructionAlgorithm != 0)
-          fIsCoG = false;
-  bool fDoChi2 = (!isReconstructionReady(igroup) || fIsCoG || !isAllLRFsDefined) ? false : true;
+  bool fDoChi2 = (!isReconstructionReady(igroup) || !isAllLRFsDefined) ? false : true;
 
   for (int iev=0; iev<ReconstructionData[igroup].size(); iev++)
     if (ReconstructionData[igroup][iev]->GoodEvent)
@@ -503,6 +499,86 @@ void EventsDataClass::prepareStatisticsForEvents(const bool isAllLRFsDefined, in
 
   if (DoDeviation && GoodEvents>0) AvDeviation /= GoodEvents;
   else AvDeviation = -1;
+}
+
+bool EventsDataClass::packEventsToByteArray(int from, int to, QByteArray& ba) const
+{
+    if (from < 0 || to > Events.size()) return false;
+
+    ba.clear();
+    QDataStream out(&ba, QIODevice::WriteOnly);
+
+    out << QString("events");
+    out << to - from;
+    out << getNumPMs();
+    for (int ievent = from; ievent < to; ievent++)
+        out << Events.at(ievent);
+
+    return true;
+}
+
+bool EventsDataClass::unpackEventsFromByteArray(const QByteArray &ba)
+{
+    QDataStream in(ba);
+
+    QString st;
+    in >> st;
+    if (st != "events") return false;
+
+    int events;
+    in >> events;
+
+    int numPMs;
+    in >> numPMs;
+
+    clear();
+    Events.resize(events);
+    for (int iev=0; iev<events; iev++)
+    {
+        Events[iev].resize(numPMs);
+        in >> Events[iev];
+    }
+
+    createDefaultReconstructionData(0);
+    emit requestEventsGuiUpdate();        //in the rare case server is with gui
+    return true;
+}
+
+bool EventsDataClass::packReconstructedToByteArray(QByteArray &ba) const
+{
+    if (ReconstructionData.isEmpty()) return false;
+
+    ba.clear();
+    QDataStream out(&ba, QIODevice::WriteOnly);
+
+    out << QString("reconstruction");
+    const int size = ReconstructionData.at(0).size();
+    out << size;
+
+    for (int ievent = 0; ievent < size; ievent++)
+        ReconstructionData.at(0).at(ievent)->sendToQDataStream(out);
+
+    return true;
+}
+
+bool EventsDataClass::unpackReconstructedFromByteArray(int from, int to, const QByteArray &ba)
+{
+    QDataStream in(ba);
+
+    QString st;
+    in >> st;
+    if (st != "reconstruction") return false;
+
+    int events;
+    in >> events;
+    if (events != (to - from) ) return false;
+
+    if (ReconstructionData.at(0).size() < to) return false;
+
+    for (int ievent = from; ievent < to; ievent++)
+        ReconstructionData[0][ievent]->unpackFromQDataStream(in);
+
+    return true;
 }
 
 void EventsDataClass::copyTrueToReconstructed(int igroup)
@@ -949,7 +1025,7 @@ bool EventsDataClass::saveSimulationAsTree(QString fileName)
   return (result == 0) ? false : true;
 }
 
-bool EventsDataClass::saveSimulationAsText(QString fileName)
+bool EventsDataClass::saveSimulationAsText(const QString& fileName, bool addNumPhotons, bool addPositions)
 {
   QFile outputFile(fileName);
   outputFile.open(QIODevice::WriteOnly);
@@ -981,10 +1057,14 @@ bool EventsDataClass::saveSimulationAsText(QString fileName)
             outStream << "    "; //5 spaces including trailing one
             for (int ip=0; ip<Scan[iev]->Points.size(); ip++)
               {
-                outStream << (int)Scan[iev]->Points[ip].energy << " ";
-                outStream << Scan[iev]->Points[ip].r[0] << " "
-                          << Scan[iev]->Points[ip].r[1] << " "
-                          << Scan[iev]->Points[ip].r[2] << "   "; //3 spaces
+                if (addNumPhotons) outStream << (int)Scan[iev]->Points[ip].energy << " ";
+                if (addPositions)
+                {
+                    outStream << Scan[iev]->Points[ip].r[0] << " "
+                              << Scan[iev]->Points[ip].r[1] << " "
+                              << Scan[iev]->Points[ip].r[2] << "   "; //3 spaces
+                }
+
               }
           }
         outStream<<"\r\n";
@@ -1475,7 +1555,7 @@ bool EventsDataClass::overlayAsciiFile(QString fileName, bool fAddMulti, APmHub*
   return true;
 }
 
-int EventsDataClass::loadSimulatedEventsFromTree(QString fileName, APmHub *PMs, int maxEvents)
+int EventsDataClass::loadSimulatedEventsFromTree(QString fileName, const APmHub &PMs, int maxEvents)
 {
   ErrorString = "";
   bool limitNumEvents = (maxEvents>0);
@@ -1497,7 +1577,7 @@ int EventsDataClass::loadSimulatedEventsFromTree(QString fileName, APmHub *PMs, 
   //if there are no scan data - in any later files scan data is ignored
   //if scan data present - any later files without scan data will NOT be loaded
 
-  int numPMs = PMs->count();
+  int numPMs = PMs.count();
   int numEv = T->GetEntries();
   //qDebug() << "Number of events found: "+QString::number(numEv);
 

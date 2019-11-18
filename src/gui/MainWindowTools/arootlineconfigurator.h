@@ -6,6 +6,7 @@
 class QPainter;
 class QSpinBox;
 class QComboBox;
+class QFrame;
 
 class ARootLineConfigurator : public QDialog
 {
@@ -18,17 +19,20 @@ protected:
   void mousePressEvent(QMouseEvent *e);
 
 private:
-  int SquareSize; 
+  int SquareSize = 30;
   QList<int> BaseColors;
   int *ReturnColor, *ReturnWidth, *ReturnStyle;
 
   QSpinBox* sbWidth;
   QComboBox* comStyle;
   QSpinBox* sbColor;
+  QFrame* frCol;
 
   void PaintColorRow(QPainter *p, int row, int colorBase);
 
 private slots:
+  void updateColorFrame();
+  void previewColor();
   void onAccept();
 };
 

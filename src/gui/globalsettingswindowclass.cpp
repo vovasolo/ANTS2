@@ -3,17 +3,18 @@
 #include "mainwindow.h"
 #include "ajavascriptmanager.h"
 #include "ascriptwindow.h"
-#include "globalsettingsclass.h"
+#include "aglobalsettings.h"
 #include "detectorclass.h"
 #include "amessage.h"
 #include "anetworkmodule.h"
 #include "geometrywindowclass.h"
-#include "ainterfacetogstylescript.h"
+#include "agstyle_si.h"
 
 //Qt
 #include <QFileDialog>
 #include <QDesktopServices>
 #include <QDebug>
+#include <QHostAddress>
 
 #include "TGeoManager.h"
 
@@ -22,7 +23,6 @@ GlobalSettingsWindowClass::GlobalSettingsWindowClass(MainWindow *parent) :
   ui(new Ui::GlobalSettingsWindowClass)
 {
   MW = parent;  
-  GlobSet = MW->GlobSet;
   ui->setupUi(this);
 
   Qt::WindowFlags windowFlags = (Qt::Window | Qt::CustomizeWindowHint);
@@ -31,12 +31,10 @@ GlobalSettingsWindowClass::GlobalSettingsWindowClass(MainWindow *parent) :
   this->setWindowFlags( windowFlags );
 
   updateGUI();
-  QObject::connect(GlobSet->NetModule, &ANetworkModule::StatusChanged, this, &GlobalSettingsWindowClass::updateNetGui);
+  QObject::connect(MW->GlobSet.getNetworkModule(), &ANetworkModule::StatusChanged, this, &GlobalSettingsWindowClass::updateNetGui);
 
-  if (GlobSet->fRunRootServerOnStart)
-    GlobSet->NetModule->StartRootHttpServer(GlobSet->DefaultRootServerPort, GlobSet->ExternalJSROOT);  //does nothing if compilation flag is not set
-  if (GlobSet->fRunWebSocketServerOnStart)
-    GlobSet->NetModule->StartWebSocketServer(GlobSet->DefaultWebSocketPort);
+  if (MW->GlobSet.fRunRootServerOnStart)
+    MW->GlobSet.getNetworkModule()->StartRootHttpServer();  //does nothing if compilation flag is not set
 }
 
 GlobalSettingsWindowClass::~GlobalSettingsWindowClass()
@@ -46,69 +44,71 @@ GlobalSettingsWindowClass::~GlobalSettingsWindowClass()
 
 void GlobalSettingsWindowClass::updateGUI()
 {
-  ui->leLibPMtypes->setText(GlobSet->LibPMtypes);
-  ui->leLibMaterials->setText(GlobSet->LibMaterials);
-  ui->leLibParticleSources->setText(GlobSet->LibParticleSources);
-  ui->leLibScripts->setText(GlobSet->LibScripts);
+  ui->leLibPMtypes->setText(MW->GlobSet.LibPMtypes);
+  ui->leLibMaterials->setText(MW->GlobSet.LibMaterials);
+  ui->leLibParticleSources->setText(MW->GlobSet.LibParticleSources);
+  ui->leLibScripts->setText(MW->GlobSet.LibScripts);
+  ui->leLibLogs->setText(MW->GlobSet.LibLogs);
 
-  ui->leWorkingDir->setText(GlobSet->TmpDir);
+  ui->leWorkingDir->setText(MW->GlobSet.TmpDir);
 
-  ui->sbFontSize->setValue(GlobSet->FontSize);
+  ui->sbFontSize->setValue(MW->GlobSet.FontSize);
 
-  //ui->rbNever->setChecked(GlobSet->NeverSaveOnExit);
-  //ui->rbAlways->setChecked(GlobSet->AlwaysSaveOnExit);
-  //ui->rbAskMe->setChecked(!GlobSet->NeverSaveOnExit && !GlobSet->AlwaysSaveOnExit);
+  ui->cbOpenImageExternalEditor->setChecked(MW->GlobSet.fOpenImageExternalEditor);
 
-  ui->cbOpenImageExternalEditor->setChecked(GlobSet->fOpenImageExternalEditor);
+  ui->sbLogPrecision->setValue(MW->GlobSet.TextLogPrecision);
 
-  ui->sbLogPrecision->setValue(GlobSet->TextLogPrecision);
+  ui->sbNumBinsHistogramsX->setValue(MW->GlobSet.BinsX);
+  ui->sbNumBinsHistogramsY->setValue(MW->GlobSet.BinsY);
+  ui->sbNumBinsHistogramsZ->setValue(MW->GlobSet.BinsZ);
 
-  ui->sbNumBinsHistogramsX->setValue(GlobSet->BinsX);
-  ui->sbNumBinsHistogramsY->setValue(GlobSet->BinsY);
-  ui->sbNumBinsHistogramsZ->setValue(GlobSet->BinsZ);
+  ui->sbNumPointsFunctionX->setValue(MW->GlobSet.FunctionPointsX);
+  ui->sbNumPointsFunctionY->setValue(MW->GlobSet.FunctionPointsY);
 
-  ui->sbNumPointsFunctionX->setValue(GlobSet->FunctionPointsX);
-  ui->sbNumPointsFunctionY->setValue(GlobSet->FunctionPointsY);
+  ui->sbNumSegments->setValue(MW->GlobSet.NumSegments);
 
-  ui->sbNumSegments->setValue(GlobSet->NumSegments);
-  ui->sbMaxNumTracks->setValue(GlobSet->MaxNumberOfTracks);
+  ui->sbNumTreads->setValue(MW->GlobSet.NumThreads);
+  ui->sbRecNumTreads->setValue(MW->GlobSet.RecNumTreads);
 
-  ui->sbNumTreads->setValue(GlobSet->NumThreads);
-  ui->sbRecNumTreads->setValue(GlobSet->RecNumTreads);
+  ui->cbSaveRecAsTree_IncludePMsignals->setChecked(MW->GlobSet.RecTreeSave_IncludePMsignals);
+  ui->cbSaveRecAsTree_IncludeRho->setChecked(MW->GlobSet.RecTreeSave_IncludeRho);
+  ui->cbSaveRecAsTree_IncludeTrue->setChecked(MW->GlobSet.RecTreeSave_IncludeTrue);
 
-  ui->cbSaveRecAsTree_IncludePMsignals->setChecked(GlobSet->RecTreeSave_IncludePMsignals);
-  ui->cbSaveRecAsTree_IncludeRho->setChecked(GlobSet->RecTreeSave_IncludeRho);
-  ui->cbSaveRecAsTree_IncludeTrue->setChecked(GlobSet->RecTreeSave_IncludeTrue);
+  ui->cbSaveSimAsText_IncludeNumPhotons->setChecked(MW->GlobSet.SimTextSave_IncludeNumPhotons);
+  ui->cbSaveSimAsText_IncludePositions->setChecked(MW->GlobSet.SimTextSave_IncludePositions);
+
+  ui->leGeant4exec->setText(MW->GlobSet.G4antsExec);
+  ui->leGeant4ExchangeFolder->setText(MW->GlobSet.G4ExchangeFolder);
 
   updateNetGui();
 }
 
 void GlobalSettingsWindowClass::updateNetGui()
 {
-  bool fWebSocketRunning = GlobSet->NetModule->isWebSocketServerRunning();
+  ui->leWebSocketIP->setText(MW->GlobSet.DefaultWebSocketIP);
+  ui->leWebSocketPort->setText(QString::number(MW->GlobSet.DefaultWebSocketPort));
+
+  ANetworkModule* Net = MW->GlobSet.getNetworkModule();
+
+  bool fWebSocketRunning = Net->isWebSocketServerRunning();
   ui->cbRunWebSocketServer->setChecked( fWebSocketRunning );
-  ui->cbAutoRunWebSocketServer->setChecked( GlobSet->fRunWebSocketServerOnStart );
   if (fWebSocketRunning)
     {
-      int port = GlobSet->NetModule->getWebSocketPort();
+      int port = Net->getWebSocketPort();
       ui->leWebSocketPort->setText(QString::number(port));
-      ui->leWebSocketURL->setText(GlobSet->NetModule->getWebSocketURL());
+      ui->leWebSocketURL->setText(Net->getWebSocketServerURL());
     }
 
-  bool fRootServerRunning = GlobSet->NetModule->isRootServerRunning();
+  bool fRootServerRunning = Net->isRootServerRunning();
   ui->cbRunRootServer->setChecked( fRootServerRunning );
-  ui->cbAutoRunRootServer->setChecked( GlobSet->fRunRootServerOnStart );
+  ui->cbAutoRunRootServer->setChecked( MW->GlobSet.fRunRootServerOnStart );
 
 #ifdef USE_ROOT_HTML
-  if (fRootServerRunning)
-    {
-      ui->leJSROOT->setText( GlobSet->NetModule->getJSROOTstring());
-      int port = GlobSet->NetModule->getRootServerPort();
-      QString sPort = QString::number(port);
-      ui->leRootServerPort->setText(sPort);
-      QString url = "http://localhost:" + sPort;
-      ui->leRootServerURL->setText(url);
-    }
+  ui->leJSROOT->setText(MW->GlobSet.ExternalJSROOT);
+  const QString sPort = QString::number(MW->GlobSet.RootServerPort);
+  ui->leRootServerPort->setText(sPort);
+  const QString url = ( fRootServerRunning ? "http://localhost:" + sPort : "" );
+  ui->leRootServerURL->setText(url);
 #else
   ui->cbRunRootServer->setChecked(false);
   ui->cbRunRootServer->setEnabled(false);
@@ -125,21 +125,39 @@ void GlobalSettingsWindowClass::SetTab(int iTab)
     ui->twMain->setCurrentIndex(iTab);
 }
 
+void GlobalSettingsWindowClass::ShowNetSettings()
+{
+    showNormal();
+    activateWindow();
+    SetTab(5);
+}
+
+bool GlobalSettingsWindowClass::event(QEvent *event)
+{
+    if (event->type() == QEvent::WindowActivate) updateGUI();
+
+    return QMainWindow::event(event);
+}
+
 void GlobalSettingsWindowClass::on_pbgStyleScript_clicked()
 {
     MW->extractGeometryOfLocalScriptWindow();
     delete MW->GenScriptWindow; MW->GenScriptWindow = 0;
 
     AJavaScriptManager* jsm = new AJavaScriptManager(MW->Detector->RandGen);
-    MW->GenScriptWindow = new AScriptWindow(jsm, GlobSet, true, this);
+    MW->GenScriptWindow = new AScriptWindow(jsm, true, this);
 
-    QString example = QString("");
-    MW->GenScriptWindow->ConfigureForLightMode(&GlobSet->RootStyleScript,
+    QString example = QString("//see https://root.cern.ch/doc/master/classTStyle.html\n"
+                              "\n"
+                              "//try, e.g.:\n"
+                              "//SetOptStat(\"ei\") //\"nemr\" is redault");
+    MW->GenScriptWindow->ConfigureForLightMode(&MW->GlobSet.RootStyleScript,
                               "Script to set ROOT's gStyle",
                               example);
 
-    GStyleInterface = new AInterfaceToGStyleScript();
-    MW->GenScriptWindow->SetInterfaceObject(GStyleInterface);
+    GStyleInterface = new AGStyle_SI();
+    MW->GenScriptWindow->RegisterInterfaceAsGlobal(GStyleInterface);
+    MW->GenScriptWindow->UpdateGui();
 
     MW->recallGeometryOfLocalScriptWindow();
     MW->GenScriptWindow->show();
@@ -157,8 +175,8 @@ void GlobalSettingsWindowClass::on_pbgStyleScript_clicked()
   MW->GenScriptWindow->SetExample("");
   MW->GenScriptWindow->SetShowEvaluationResult(false); //do not show "undefined"
   MW->GenScriptWindow->SetTitle("Script to set ROOT's gStyle");
-  MW->GenScriptWindow->SetScript(&GlobSet->RootStyleScript);
-  MW->GenScriptWindow->SetStarterDir(MW->GlobSet->LibScripts);
+  MW->GenScriptWindow->SetScript(&MW->GlobSet.RootStyleScript);
+  MW->GenScriptWindow->SetStarterDir(MW->MW->GlobSet.LibScripts);
 
   //define what to do on evaluation success
   //connect(MW->GenScriptWindow, SIGNAL(success(QString)), this, SLOT(HolesScriptSuccess()));
@@ -169,63 +187,77 @@ void GlobalSettingsWindowClass::on_pbgStyleScript_clicked()
 
 void GlobalSettingsWindowClass::on_pbChoosePMtypeLib_clicked()
 {
-  QString starter = (GlobSet->LibPMtypes.isEmpty()) ? GlobSet->LastOpenDir : GlobSet->LibPMtypes;
+  QString starter = (MW->GlobSet.LibPMtypes.isEmpty()) ? MW->GlobSet.LastOpenDir : MW->GlobSet.LibPMtypes;
   QString dir = QFileDialog::getExistingDirectory(this, "Select directory for PM types",starter,QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
   if (dir.isEmpty()) return;
-  GlobSet->LibPMtypes = dir;
+  MW->GlobSet.LibPMtypes = dir;
   ui->leLibPMtypes->setText(dir);
 }
 void GlobalSettingsWindowClass::on_leLibPMtypes_editingFinished()
 {
-  GlobSet->LibPMtypes = ui->leLibPMtypes->text();
+  MW->GlobSet.LibPMtypes = ui->leLibPMtypes->text();
 }
 
 void GlobalSettingsWindowClass::on_pbChooseMaterialLib_clicked()
 {
-  QString starter = (GlobSet->LibMaterials.isEmpty()) ? GlobSet->LastOpenDir : GlobSet->LibMaterials;
+  QString starter = (MW->GlobSet.LibMaterials.isEmpty()) ? MW->GlobSet.LastOpenDir : MW->GlobSet.LibMaterials;
   QString dir = QFileDialog::getExistingDirectory(this, "Select directory for materials",starter,QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
   if (dir.isEmpty()) return;
-  GlobSet->LibMaterials = dir;
+  MW->GlobSet.LibMaterials = dir;
   ui->leLibMaterials->setText(dir);
 }
 void GlobalSettingsWindowClass::on_leLibMaterials_editingFinished()
 {
-  GlobSet->LibMaterials = ui->leLibMaterials->text();
+  MW->GlobSet.LibMaterials = ui->leLibMaterials->text();
 }
 
 void GlobalSettingsWindowClass::on_pbChooseParticleSourcesLib_clicked()
 {
-  QString starter = (GlobSet->LibParticleSources.isEmpty()) ? GlobSet->LastOpenDir : GlobSet->LibParticleSources;
+  QString starter = (MW->GlobSet.LibParticleSources.isEmpty()) ? MW->GlobSet.LastOpenDir : MW->GlobSet.LibParticleSources;
   QString dir = QFileDialog::getExistingDirectory(this, "Select directory for particle sources",starter,QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
   if (dir.isEmpty()) return;
-  GlobSet->LibParticleSources = dir;
+  MW->GlobSet.LibParticleSources = dir;
   ui->leLibParticleSources->setText(dir);
 }
 void GlobalSettingsWindowClass::on_leLibParticleSources_editingFinished()
 {
-  GlobSet->LibParticleSources = ui->leLibParticleSources->text();
+  MW->GlobSet.LibParticleSources = ui->leLibParticleSources->text();
 }
 
 void GlobalSettingsWindowClass::on_pbChooseScriptsLib_clicked()
 {
-  QString starter = (GlobSet->LibScripts.isEmpty()) ? GlobSet->LastOpenDir : GlobSet->LibScripts;
+  QString starter = (MW->GlobSet.LibScripts.isEmpty()) ? MW->GlobSet.LastOpenDir : MW->GlobSet.LibScripts;
   QString dir = QFileDialog::getExistingDirectory(this, "Select directory for scripts",starter,QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
   if (dir.isEmpty()) return;
-  GlobSet->LibScripts = dir;
+  MW->GlobSet.LibScripts = dir;
   ui->leLibScripts->setText(dir);
 }
 void GlobalSettingsWindowClass::on_leLibScripts_editingFinished()
 {
-  GlobSet->LibScripts = ui->leLibScripts->text();
+  MW->GlobSet.LibScripts = ui->leLibScripts->text();
+}
+
+void GlobalSettingsWindowClass::on_pbChooseLogsLib_clicked()
+{
+    QString starter = (MW->GlobSet.LibLogs.isEmpty()) ? MW->GlobSet.LastOpenDir : MW->GlobSet.LibLogs;
+    QString dir = QFileDialog::getExistingDirectory(this, "Select directory for scripts",starter,QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+    if (dir.isEmpty()) return;
+    MW->GlobSet.LibLogs = dir;
+    ui->leLibLogs->setText(dir);
+}
+
+void GlobalSettingsWindowClass::on_leLibLogs_editingFinished()
+{
+    MW->GlobSet.LibLogs = ui->leLibLogs->text();
 }
 
 void GlobalSettingsWindowClass::on_pbChangeWorkingDir_clicked()
 {
-  QString starter = GlobSet->TmpDir;
+  QString starter = MW->GlobSet.TmpDir;
   QString dir = QFileDialog::getExistingDirectory(this, "Select working directory (temporary files are saved here)",starter,QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
   if (dir.isEmpty()) return;
-  GlobSet->TmpDir = dir;
-  QDir::setCurrent(GlobSet->TmpDir);
+  MW->GlobSet.TmpDir = dir;
+  QDir::setCurrent(MW->GlobSet.TmpDir);
   ui->leWorkingDir->setText(dir);
 }
 void GlobalSettingsWindowClass::on_leWorkingDir_editingFinished()
@@ -233,56 +265,56 @@ void GlobalSettingsWindowClass::on_leWorkingDir_editingFinished()
    QString dir = ui->leWorkingDir->text();
    if ( QDir(dir).exists() )
      {
-       GlobSet->TmpDir = dir;
-       QDir::setCurrent(GlobSet->TmpDir);
+       MW->GlobSet.TmpDir = dir;
+       QDir::setCurrent(MW->GlobSet.TmpDir);
        ui->leWorkingDir->setText(dir);
      }
    else
      {
-       ui->leWorkingDir->setText(GlobSet->TmpDir);
+       ui->leWorkingDir->setText(MW->GlobSet.TmpDir);
        message("Dir does not exists!", this);
      }
 }
 
 void GlobalSettingsWindowClass::on_sbFontSize_editingFinished()
 {
-    GlobSet->FontSize = ui->sbFontSize->value();
-    MW->setFontSizeAllWindows(GlobSet->FontSize);
+    MW->GlobSet.FontSize = ui->sbFontSize->value();
+    MW->setFontSizeAllWindows(MW->GlobSet.FontSize);
 }
 
 void GlobalSettingsWindowClass::on_rbAlways_toggled(bool /*checked*/)
 {
-  //GlobSet->AlwaysSaveOnExit = checked;
+  //MW->GlobSet.AlwaysSaveOnExit = checked;
 }
 
 void GlobalSettingsWindowClass::on_rbNever_toggled(bool /*checked*/)
 {
-  //GlobSet->NeverSaveOnExit = checked;
+  //MW->GlobSet.NeverSaveOnExit = checked;
 }
 
 void GlobalSettingsWindowClass::on_cbOpenImageExternalEditor_clicked(bool checked)
 {
-  GlobSet->fOpenImageExternalEditor = checked;
+  MW->GlobSet.fOpenImageExternalEditor = checked;
 }
 
 void GlobalSettingsWindowClass::on_sbLogPrecision_editingFinished()
 {
-  GlobSet->TextLogPrecision = ui->sbLogPrecision->value();
+  MW->GlobSet.TextLogPrecision = ui->sbLogPrecision->value();
 }
 
 void GlobalSettingsWindowClass::on_sbNumBinsHistogramsX_editingFinished()
 {
-  GlobSet->BinsX = ui->sbNumBinsHistogramsX->value();
+  MW->GlobSet.BinsX = ui->sbNumBinsHistogramsX->value();
 }
 
 void GlobalSettingsWindowClass::on_sbNumBinsHistogramsY_editingFinished()
 {
-  GlobSet->BinsY = ui->sbNumBinsHistogramsY->value();
+  MW->GlobSet.BinsY = ui->sbNumBinsHistogramsY->value();
 }
 
 void GlobalSettingsWindowClass::on_sbNumBinsHistogramsZ_editingFinished()
 {
-  GlobSet->BinsZ = ui->sbNumBinsHistogramsZ->value();
+  MW->GlobSet.BinsZ = ui->sbNumBinsHistogramsZ->value();
 }
 
 void GlobalSettingsWindowClass::on_pbChoosePMtypeLib_customContextMenuRequested(const QPoint &/*pos*/)
@@ -315,19 +347,22 @@ void GlobalSettingsWindowClass::on_pbOpen_clicked()
   switch (ui->comboBox->currentIndex())
     {
     case 0:
-      what = GlobSet->AntsBaseDir;
+      what = MW->GlobSet.AntsBaseDir;
       break;
     case 1:
-      what = GlobSet->ConfigDir;
+      what = MW->GlobSet.ConfigDir;
       break;
     case 2:
-      what = GlobSet->LibScripts;
+      what = MW->GlobSet.LibScripts;
       break;
     case 3:
-      what = GlobSet->LastOpenDir;
+      what = MW->GlobSet.LastOpenDir;
       break;
     case 4:
-      what = GlobSet->ExamplesDir;
+      what = MW->GlobSet.ExamplesDir;
+      break;
+    case 5:
+      what = MW->GlobSet.LibLogs;
       break;
     }
   QDesktopServices::openUrl(QUrl("file:///"+what, QUrl::TolerantMode));
@@ -335,24 +370,19 @@ void GlobalSettingsWindowClass::on_pbOpen_clicked()
 
 void GlobalSettingsWindowClass::on_sbNumSegments_editingFinished()
 {
-    GlobSet->NumSegments = ui->sbNumSegments->value();
-    MW->Detector->GeoManager->SetNsegments(GlobSet->NumSegments);
+    MW->GlobSet.NumSegments = ui->sbNumSegments->value();
+    MW->Detector->GeoManager->SetNsegments(MW->GlobSet.NumSegments);
     MW->GeometryWindow->ShowGeometry(false);
-}
-
-void GlobalSettingsWindowClass::on_sbMaxNumTracks_editingFinished()
-{
-   GlobSet->MaxNumberOfTracks = ui->sbMaxNumTracks->value();
 }
 
 void GlobalSettingsWindowClass::on_sbNumPointsFunctionX_editingFinished()
 {
-   GlobSet->FunctionPointsX = ui->sbNumPointsFunctionX->value();
+   MW->GlobSet.FunctionPointsX = ui->sbNumPointsFunctionX->value();
 }
 
 void GlobalSettingsWindowClass::on_sbNumPointsFunctionY_editingFinished()
 {
-   GlobSet->FunctionPointsY = ui->sbNumPointsFunctionY->value();
+   MW->GlobSet.FunctionPointsY = ui->sbNumPointsFunctionY->value();
 }
 
 void GlobalSettingsWindowClass::on_sbNumTreads_valueChanged(int arg1)
@@ -362,73 +392,140 @@ void GlobalSettingsWindowClass::on_sbNumTreads_valueChanged(int arg1)
 
 void GlobalSettingsWindowClass::on_sbNumTreads_editingFinished()
 {
-    GlobSet->NumThreads = ui->sbNumTreads->value();
+    MW->GlobSet.NumThreads = ui->sbNumTreads->value();
 }
 
 void GlobalSettingsWindowClass::on_cbSaveRecAsTree_IncludePMsignals_clicked(bool checked)
 {
-    GlobSet->RecTreeSave_IncludePMsignals = checked;
+    MW->GlobSet.RecTreeSave_IncludePMsignals = checked;
 }
 
 void GlobalSettingsWindowClass::on_cbSaveRecAsTree_IncludeRho_clicked(bool checked)
 {
-    GlobSet->RecTreeSave_IncludeRho = checked;
+    MW->GlobSet.RecTreeSave_IncludeRho = checked;
 }
 
 void GlobalSettingsWindowClass::on_cbSaveRecAsTree_IncludeTrue_clicked(bool checked)
 {
-    GlobSet->RecTreeSave_IncludeTrue = checked;
+    MW->GlobSet.RecTreeSave_IncludeTrue = checked;
 }
 
 void GlobalSettingsWindowClass::on_cbRunWebSocketServer_clicked(bool checked)
 {
-  if (checked)
-    GlobSet->NetModule->StartWebSocketServer(GlobSet->DefaultWebSocketPort);
-  else
-    GlobSet->NetModule->StopWebSocketServer();
-}
+  ANetworkModule* Net = MW->GlobSet.getNetworkModule();
+  Net->StopWebSocketServer();
 
-void GlobalSettingsWindowClass::on_cbAutoRunWebSocketServer_clicked()
-{
-  GlobSet->fRunWebSocketServerOnStart = ui->cbAutoRunWebSocketServer->isChecked();
+  if (checked)
+      Net->StartWebSocketServer(QHostAddress(MW->GlobSet.DefaultWebSocketIP), MW->GlobSet.DefaultWebSocketPort);
 }
 
 void GlobalSettingsWindowClass::on_leWebSocketPort_editingFinished()
 {
-  int oldp = GlobSet->DefaultWebSocketPort;
+  int oldp = MW->GlobSet.DefaultWebSocketPort;
   int newp = ui->leWebSocketPort->text().toInt();
-  if (oldp == newp) return;
 
-  GlobSet->DefaultWebSocketPort = newp;
-  if (ui->cbRunWebSocketServer->isChecked())
-      GlobSet->NetModule->StartWebSocketServer(GlobSet->DefaultWebSocketPort);
+  if (oldp != newp)
+  {
+      MW->GlobSet.DefaultWebSocketPort = newp;
+      ui->cbRunWebSocketServer->setChecked(false);
+      MW->GlobSet.DefaultWebSocketPort = newp;
+      ui->leWebSocketPort->setText(QString::number(newp));
+  }
+}
+
+void GlobalSettingsWindowClass::on_leWebSocketIP_editingFinished()
+{
+    QString newIP = ui->leWebSocketIP->text();
+    if (newIP == MW->GlobSet.DefaultWebSocketIP) return;
+
+    QHostAddress ip = QHostAddress(newIP);
+    if (ip.isNull())
+    {
+        ui->leWebSocketIP->setText(MW->GlobSet.DefaultWebSocketIP);
+        message("Bad format of IP: use, e.g., 127.0.0.1", this);
+    }
+    else
+    {
+        MW->GlobSet.DefaultWebSocketIP = newIP;
+        ui->cbRunWebSocketServer->setChecked(false);
+    }
 }
 
 void GlobalSettingsWindowClass::on_cbRunRootServer_clicked(bool checked)
 {
+    ANetworkModule* Net = MW->GlobSet.getNetworkModule();
+
     if (checked)
-      GlobSet->NetModule->StartRootHttpServer(GlobSet->DefaultRootServerPort, GlobSet->ExternalJSROOT);  //does nothing if compilation flag is not set
+      Net->StartRootHttpServer();  //does nothing if compilation flag is not set
     else
-      GlobSet->NetModule->StopRootHttpServer();
+      Net->StopRootHttpServer();
 }
 
 void GlobalSettingsWindowClass::on_cbAutoRunRootServer_clicked()
 {
-  GlobSet->fRunRootServerOnStart = ui->cbAutoRunRootServer->isChecked();
+  MW->GlobSet.fRunRootServerOnStart = ui->cbAutoRunRootServer->isChecked();
 }
 
 void GlobalSettingsWindowClass::on_leRootServerPort_editingFinished()
 {
-  int oldp = GlobSet->DefaultWebSocketPort;
-  int newp = ui->leRootServerPort->text().toInt();
-  if (oldp == newp) return;
-  GlobSet->DefaultRootServerPort = ui->leRootServerPort->text().toInt();
+    int oldp = MW->GlobSet.RootServerPort;
+    int newp = ui->leRootServerPort->text().toInt();
+    if (oldp == newp) return;
+    MW->GlobSet.RootServerPort = newp;
 
-  if (ui->cbRunRootServer->isChecked())
-  GlobSet->NetModule->StartRootHttpServer(GlobSet->DefaultRootServerPort, GlobSet->ExternalJSROOT);  //does nothing if compilation flag is not set
+    ui->cbRunRootServer->setChecked(false);
 }
 
 void GlobalSettingsWindowClass::on_leJSROOT_editingFinished()
 {
-  GlobSet->ExternalJSROOT = ui->leJSROOT->text();
+    const QString & olda = MW->GlobSet.ExternalJSROOT;
+    QString newa = ui->leJSROOT->text();
+    if (olda == newa) return;
+    MW->GlobSet.ExternalJSROOT = newa;
+
+    ui->cbRunRootServer->setChecked(false);
 }
+
+void GlobalSettingsWindowClass::on_cbRunWebSocketServer_toggled(bool checked)
+{
+    if (!checked) ui->leWebSocketURL->clear();
+}
+
+void GlobalSettingsWindowClass::on_cbSaveSimAsText_IncludeNumPhotons_clicked(bool checked)
+{
+    MW->GlobSet.SimTextSave_IncludeNumPhotons = checked;
+}
+
+void GlobalSettingsWindowClass::on_cbSaveSimAsText_IncludePositions_clicked(bool checked)
+{
+    MW->GlobSet.SimTextSave_IncludePositions = checked;
+}
+
+void GlobalSettingsWindowClass::on_pbGeant4exec_clicked()
+{
+    QString fn = QFileDialog::getOpenFileName(this, "G4ants executable", MW->GlobSet.G4antsExec);
+    if (fn.isEmpty()) return;
+    ui->leGeant4exec->setText(fn);
+    MW->GlobSet.G4antsExec = fn;
+}
+
+void GlobalSettingsWindowClass::on_leGeant4exec_editingFinished()
+{
+    MW->GlobSet.G4antsExec = ui->leGeant4exec->text();
+}
+
+void GlobalSettingsWindowClass::on_pbGeant4ExchangeFolder_clicked()
+{
+    QString starter = MW->GlobSet.G4ExchangeFolder;
+    QString dir = QFileDialog::getExistingDirectory(this, "Select folder for Ants2<->Geant4 file exchange",starter,QFileDialog::ShowDirsOnly | QFileDialog::DontResolveSymlinks);
+    if (dir.isEmpty()) return;
+    ui->leGeant4ExchangeFolder->setText(dir);
+    MW->GlobSet.G4ExchangeFolder = ui->leGeant4ExchangeFolder->text();
+}
+
+void GlobalSettingsWindowClass::on_leGeant4ExchangeFolder_editingFinished()
+{
+    MW->GlobSet.G4ExchangeFolder = ui->leGeant4ExchangeFolder->text();
+}
+
+

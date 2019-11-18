@@ -3,7 +3,7 @@
 
 #include <QJsonObject>
 
-void AMonitorConfig::writeToJson(QJsonObject &json)
+void AMonitorConfig::writeToJson(QJsonObject &json) const
 {
    json["shape"] = shape;
    json["size1"] = size1;
@@ -16,8 +16,10 @@ void AMonitorConfig::writeToJson(QJsonObject &json)
    json["bStopTracking"] = bStopTracking;
 
    json["ParticleIndex"] = ParticleIndex;
-   json["bPrimary"] = bPrimary;
+   json["bPrimary"]   = bPrimary;
    json["bSecondary"] = bSecondary;
+   json["bDirect"]    = bDirect;
+   json["bIndirect"]  = bIndirect;
 
    json["xbins"] = xbins;
    json["ybins"] = ybins;
@@ -40,7 +42,7 @@ void AMonitorConfig::writeToJson(QJsonObject &json)
    json["energyUnitsInHist"] = energyUnitsInHist;
 }
 
-void AMonitorConfig::readFromJson(QJsonObject &json)
+void AMonitorConfig::readFromJson(const QJsonObject & json)
 {
     parseJson(json, "shape", shape);
     parseJson(json, "size1", size1);
@@ -53,8 +55,10 @@ void AMonitorConfig::readFromJson(QJsonObject &json)
     parseJson(json, "bStopTracking", bStopTracking);
 
     parseJson(json, "ParticleIndex", ParticleIndex);
-    parseJson(json, "bPrimary", bPrimary);
+    parseJson(json, "bPrimary",   bPrimary);
     parseJson(json, "bSecondary", bSecondary);
+    parseJson(json, "bDirect",    bDirect);
+    parseJson(json, "bIndirect",  bIndirect);
 
     parseJson(json, "xbins", xbins);
     parseJson(json, "ybins", ybins);

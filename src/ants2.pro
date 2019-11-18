@@ -1,28 +1,46 @@
 #--------------ANTS2--------------
 ANTS2_MAJOR = 4
-ANTS2_MINOR = 8
+ANTS2_MINOR = 24
 
 #Optional libraries
 #CONFIG += ants2_cuda        #enable CUDA support - need NVIDIA GPU and drivers (CUDA toolkit) installed!
-#CONFIG += ants2_flann       #enable FLANN (fast neighbour search) library
-#CONFIG += ants2_fann        #enables FANN (fast neural network) library
+#CONFIG += ants2_flann       #enable FLANN (fast neighbour search) library: see https://github.com/mariusmuja/flann
+#CONFIG += ants2_fann        #enables FANN (fast neural network) library: see https://github.com/libfann/fann
 CONFIG += ants2_eigen3      #use Eigen3 library instead of ROOT for linear algebra - highly recommended! Installation requires only to copy files!
-#CONFIG += ants2_RootServer  #enable cern CERN ROOT html server
-#CONFIG += ants2_Python      #enable Python scripting - experimental feature, work in progress!
+CONFIG += ants2_RootServer  #enable cern CERN ROOT html server
+#CONFIG += ants2_Python      #enable Python scripting
+#CONFIG += ants2_NCrystal    #enable NCrystal library (neutron scattering): see https://github.com/mctools/ncrystal
+
+CONFIG += ants2_jsroot       #enables JSROOT visualisation at GeometryWindow. Automatically enables ants2_RootServer
+
+# You may need to modify paths for CERN ROOT and the enabled libraries! See the corresponding sections below
+
+#Optional features enabled in Docker version   
+ants2_docker {
+    CONFIG += ANTS_DOCKER
+    CONFIG += ants2_flann       #enable FLANN (fast neighbour search) library: see https://github.com/mariusmuja/flann
+    CONFIG += ants2_fann        #enables FANN (fast neural network) library: see https://github.com/libfann/fann
+    CONFIG += ants2_RootServer  #enable cern CERN ROOT html server
+    CONFIG += ants2_Python      #enable Python scripting  
+    CONFIG += ants2_NCrystal    #enable NCrystal library (neutron scattering)  
+}
 
 DEBUG_VERBOSITY = 1          # 0 - debug messages suppressed, 1 - normal, 2 - normal + file/line information
                              # after a change, qmake and rebuild (or qmake + make any change in main.cpp to trigger recompilation)
 
+CONFIG += ants2_GUI         #if disabled, GUI is not compiled
+CONFIG += ants2_SIM         #if disabled, simulation-related modules are not compiled
+
 #---CERN ROOT---
 win32 {
      INCLUDEPATH += c:/root/include
-     LIBS += -Lc:/root/lib/ -llibCore -llibCint -llibRIO -llibNet -llibHist -llibGraf -llibGraf3d -llibGpad -llibTree -llibRint -llibPostscript -llibMatrix -llibPhysics -llibRint -llibMathCore -llibGeom -llibGeomPainter -llibGeomBuilder -llibMathMore -llibMinuit2 -llibThread -llibSpectrum
+     LIBS += -Lc:/root/lib/ -llibCore -llibRIO -llibNet -llibHist -llibGraf -llibGraf3d -llibGpad -llibTree -llibRint -llibPostscript -llibMatrix -llibPhysics -llibMathCore -llibGeom -llibGeomPainter -llibGeomBuilder -llibMinuit2 -llibThread -llibSpectrum
      ants2_RootServer {LIBS += -llibRHTTP}
 }
 linux-g++ || unix {
      INCLUDEPATH += $$system(root-config --incdir)
-     LIBS += $$system(root-config --libs) -lGeom -lGeomPainter -lGeomBuilder -lMathMore -lMinuit2 -lSpectrum
-     ants2_RootServer {LIBS += -llibRHTTP}
+     LIBS += $$system(root-config --libs) -lGeom -lGeomPainter -lGeomBuilder -lMinuit2 -lSpectrum
+     ants2_RootServer {LIBS += -lRHTTP  -lXMLIO}
 }
 #-----------
 
@@ -65,18 +83,22 @@ ants2_matrix { # use matrix algebra for TP splines
 
 #---FLANN---
 ants2_flann {
-     DEFINES += ANTS_FLANN
+    DEFINES += ANTS_FLANN
 
-     win32 {
-        LIBS += -LC:/FLANN/lib -lflann
-        INCLUDEPATH += C:/FLANN/include
-     }
+    win32 {
+       LIBS += -LC:/FLANN/lib -lflann
+       INCLUDEPATH += C:/FLANN/include
+    }
+    linux-g++ || unix {
+        LIBS += -lflann
+        ants2_docker{ LIBS += -llz4 }
+    }
 
     HEADERS += modules/nnmoduleclass.h
     SOURCES += modules/nnmoduleclass.cpp
-
-    HEADERS += scriptmode/ainterfacetoknnscript.h
-    SOURCES += scriptmode/ainterfacetoknnscript.cpp
+      #interface to script module
+    HEADERS += scriptmode/aknn_si.h
+    SOURCES += scriptmode/aknn_si.cpp
 }
 #----------
 
@@ -89,7 +111,9 @@ ants2_fann {
         INCLUDEPATH += c:/FANN-2.2.0-Source/src/include
         DEFINES += NOMINMAX
      }
-     linux-g++ || unix { LIBS += -lfann }
+     linux-g++ || unix {
+        LIBS += -L/usr/local/lib -lfann
+     }
 
      #main module
     HEADERS += modules/neuralnetworksmodule.h
@@ -98,8 +122,8 @@ ants2_fann {
     HEADERS += gui/neuralnetworkswindow.h
     SOURCES += gui/neuralnetworkswindow.cpp
       #interface to script module
-    HEADERS += scriptmode/ainterfacetoannscript.h
-    SOURCES += scriptmode/ainterfacetoannscript.cpp
+    HEADERS += scriptmode/aann_si.h
+    SOURCES += scriptmode/aann_si.cpp
 }
 #---------
 
@@ -163,36 +187,33 @@ ants2_cuda {
      }
 }
 
-#---ROOT server---
-ants2_RootServer{
-  DEFINES += USE_ROOT_HTML
-}
-#----------
-
 #---Python---
 ants2_Python{
     DEFINES += __USE_ANTS_PYTHON__
 
-    #http://pythonqt.sourceforge.net/
+    #http://pythonqt.sourceforge.net/ or https://github.com/Orochimarufan/PythonQt
+    #for PythonQt installation see instructions in PythonQtInstall.txt in the root of ANTS2 on GitHub
     win32:{
-            INCLUDEPATH += c:/Python33/include
-            LIBS += -Lc:/Python33/libs -lPython33
+            INCLUDEPATH += 'C:/Program Files (x86)/Microsoft Visual Studio/Shared/Python36_86/include'
+            LIBS += -L'C:/Program Files (x86)/Microsoft Visual Studio/Shared/Python36_86/libs' -lPython36
 
             INCLUDEPATH += C:/PythonQt3.2/src
-            INCLUDEPATH += C:/PythonQt3.2/extensions/PythonQt_QtAll
-
-            LIBS += -LC:/PythonQt3.2 -lPythonQt_QtAll-Qt5-Python333 -lPythonQt-Qt5-Python333
+            LIBS += -LC:/PythonQt3.2/lib -lPythonQt
     }
     linux-g++ || unix {
-            INCLUDEPATH += $$system(python-config --includes) #fix:  --includes returns in -I/path format, and Qt expects /path
-            LIBS += $$system(python-config --libs)
+            ants2_docker { 
+                LIBS += $$system(python3-config --libs)
+                QMAKE_CXXFLAGS += $$system(python3-config --includes)
 
-            INCLUDEPATH += usr/PythonQt3.2/src
-            INCLUDEPATH += usr/PythonQt3.2/extensions/PythonQt_QtAll
+                INCLUDEPATH += /usr/include/PythonQt5/
+                LIBS += -lPythonQt-Qt5-Python3.6
+            } else {
+                LIBS += $$system(python3-config --libs)
+                QMAKE_CXXFLAGS += $$system(python3-config --includes)
 
-            LIBS += -Lusr/PythonQt3.2/lib/ #only this?
-            LIBS += -Lusr/PythonQt3.2
-            LIBS += -lPythonQt_QtAll-Qt5-Python27 -lPythonQt-Qt5-Python27
+                INCLUDEPATH += /usr/include/PythonQt5/
+                LIBS += -lPythonQt-Qt5-Python3.6
+            }
     }
 
     HEADERS += scriptmode/apythonscriptmanager.h
@@ -202,9 +223,55 @@ ants2_Python{
 }
 #----------
 
-#Modular compilation flags
-CONFIG += ants2_GUI         #if disabled, GUI is not compiled
-CONFIG += ants2_SIM         #if disabled, simulation-related modules are not compiled
+#---NCrystal---
+#see https://github.com/mctools/ncrystal
+ants2_NCrystal{
+    DEFINES += __USE_ANTS_NCRYSTAL__
+
+    win32:{
+            INCLUDEPATH += C:/NCrystal/ncrystal_core/include
+            LIBS += -LC:/NCrystal/lib -lNCrystal
+    }
+    linux-g++ || unix {
+            ants2_docker {
+                INCLUDEPATH += /usr/local/include/NCrystal/
+                LIBS += -L/usr/local/lib/
+                LIBS += -lNCrystal
+
+            } else {
+                INCLUDEPATH += /home/andr/Work/NCrystal/include
+                LIBS += -L/home/andr/Work/NCrystal/lib/
+                LIBS += -lNCrystal
+            }
+    }
+
+    SOURCES += common/arandomgenncrystal.cpp
+    HEADERS += common/arandomgenncrystal.h
+}
+#----------
+
+#---JSROOT viewer---
+ants2_jsroot{
+    DEFINES += __USE_ANTS_JSROOT__
+    QT      += webenginewidgets
+    CONFIG  += ants2_RootServer
+}
+#----------
+
+#---ROOT server---
+ants2_RootServer{
+  DEFINES += USE_ROOT_HTML
+
+    SOURCES += Net/aroothttpserver.cpp
+    HEADERS += Net/aroothttpserver.h
+}
+#----------
+
+#Can be used as command line option to force-disable GUI
+Headless {
+message("--> Compiling without GUI")
+CONFIG -= ants2_GUI
+}
 
 #---ANTS2 files---
 SOURCES += main.cpp \
@@ -212,7 +279,6 @@ SOURCES += main.cpp \
     common/CorrelationFilters.cpp \
     common/reconstructionsettings.cpp \
     common/generalsimsettings.cpp \
-    common/globalsettingsclass.cpp \
     common/tmpobjhubclass.cpp \
     common/ajsontools.cpp \
     common/afiletools.cpp \
@@ -225,12 +291,10 @@ SOURCES += main.cpp \
     common/apmarraydata.cpp \
     common/aqtmessageredirector.cpp \
     common/ageoobject.cpp \
-    common/aopticaloverride.cpp \
+    OpticalOverrides/aopticaloverride.cpp \
     modules/detectorclass.cpp \
     modules/eventsdataclass.cpp \
     modules/dynamicpassiveshandler.cpp \
-    modules/processorclass.cpp \
-    modules/particlesourcesclass.cpp \
     modules/flatfield.cpp \
     modules/sensorlrfs.cpp \
     modules/manifesthandling.cpp \
@@ -254,11 +318,10 @@ SOURCES += main.cpp \
     modules/lrf_v2/lrffactory.cpp \
     modules/lrf_v2/alrffitsettings.cpp \
     CUDA/cudamanagerclass.cpp \
-    scriptmode/interfacetoglobscript.cpp \
     scriptmode/scriptminimizer.cpp \
     scriptmode/ascriptexample.cpp \
     scriptmode/ascriptexampledatabase.cpp \
-    gui/MainWindowTools/slab.cpp \
+    common/aslab.cpp \
     modules/lrf_v3/arecipe.cpp \
     modules/lrf_v3/alrftypemanager.cpp \
     modules/lrf_v3/arepository.cpp \
@@ -269,73 +332,101 @@ SOURCES += main.cpp \
     modules/lrf_v3/ainstructioninput.cpp \
     modules/lrf_v3/afitlayersensorgroup.cpp \
     modules/alrfmoduleselector.cpp \
-    common/acollapsiblegroupbox.cpp \
     common/ascriptvaluecopier.cpp \
-    gui/MainWindowTools/arootmarkerconfigurator.cpp \
     common/acustomrandomsampling.cpp \
-    gui/ahighlighters.cpp \
     common/amaterial.cpp \
     common/aparticle.cpp \
     modules/amaterialparticlecolection.cpp\
     common/ascriptvalueconverter.cpp \
-    scriptmode/ainterfacetowebsocket.cpp \
     common/ainternetbrowser.cpp \
-    Net/aroothttpserver.cpp \
     Net/anetworkmodule.cpp \
-    modules/lrf_v3/gui/atpspline3widget.cpp \
-    modules/lrf_v3/gui/avladimircompressionwidget.cpp \
-    scriptmode/ainterfacetophotonscript.cpp \
     common/aphotonhistorylog.cpp \
     common/amonitor.cpp \
     common/aroothistappenders.cpp \
-    gui/MainWindowTools/amonitordelegateform.cpp \
     common/amonitorconfig.cpp \
     common/apeakfinder.cpp \
     common/amaterialcomposition.cpp \
-    gui/aelementandisotopedelegates.cpp \
-    gui/amatparticleconfigurator.cpp \
     common/aneutroninteractionelement.cpp \
-    gui/aneutronreactionsconfigurator.cpp \
-    gui/aneutronreactionwidget.cpp \
-    gui/aneutroninfodialog.cpp \
-    scriptmode/ainterfacetodeposcript.cpp \
-    scriptmode/ainterfacetomessagewindow.cpp \
-    scriptmode/coreinterfaces.cpp \
     scriptmode/localscriptinterfaces.cpp \
     scriptmode/histgraphinterfaces.cpp \
-    gui/GraphWindowTools/atoolboxscene.cpp \
-    scriptmode/ainterfacetomultithread.cpp \
-    scriptmode/ascriptmessengerdialog.cpp \
     scriptmode/arootgraphrecord.cpp \
     scriptmode/aroothistrecord.cpp \
     common/arootobjcollection.cpp \
     common/arootobjbase.cpp \
     common/acalibratorsignalperphel.cpp \
-    modules/areconstructionmanager.cpp \
+    Reconstruction/areconstructionmanager.cpp \
     scriptmode/ajavascriptmanager.cpp \
     scriptmode/ascriptmanager.cpp \
     common/apm.cpp \
     modules/apmhub.cpp \
     common/apmtype.cpp \
-    scriptmode/ainterfacetoguiscript.cpp \
     modules/aoneevent.cpp \
-    scriptmode/ainterfacetottree.cpp \
     common/aroottreerecord.cpp \
-    gui/atextedit.cpp \
-    gui/alineedit.cpp \    
-    scriptmode/ainterfacetoaddobjscript.cpp \
-    scriptmode/ainterfacetogstylescript.cpp \
     Net/awebsocketsessionserver.cpp \
     Net/awebsocketstandalonemessanger.cpp \
     Net/awebsocketsession.cpp \
-    gui/awebsocketserverdialog.cpp \
-    scriptmode/awebserverinterface.cpp
+    common/agammarandomgenerator.cpp \
+    Net/agridrunner.cpp \
+    Net/aremoteserverrecord.cpp \
+    common/atrackbuildoptions.cpp \
+    OpticalOverrides/aopticaloverridescriptinterface.cpp \
+    OpticalOverrides/ascriptopticaloverride.cpp \
+    common/atracerstateful.cpp \
+    common/aphoton.cpp \
+    OpticalOverrides/fsnpopticaloverride.cpp \
+    OpticalOverrides/awaveshifteroverride.cpp \
+    OpticalOverrides/spectralbasicopticaloverride.cpp \
+    OpticalOverrides/abasicopticaloverride.cpp \
+    common/aglobalsettings.cpp \
+    common/aparticlesourcerecord.cpp \
+    Simulation/ascriptparticlegenerator.cpp \
+    Simulation/afileparticlegenerator.cpp \
+    Simulation/aparticlerecord.cpp \
+    Simulation/asourceparticlegenerator.cpp \
+    common/aisotopeabundancehandler.cpp \
+    common/aisotope.cpp \
+    common/achemicalelement.cpp \
+    Simulation/ag4simulationsettings.cpp \
+    gui/ageant4configdialog.cpp \
+    scriptmode/asim_si.cpp \
+    scriptmode/amath_si.cpp \
+    scriptmode/atree_si.cpp \
+    scriptmode/aphoton_si.cpp \
+    scriptmode/acore_si.cpp \
+    scriptmode/ageo_si.cpp \
+    scriptmode/aserver_si.cpp \
+    scriptmode/aweb_si.cpp \
+    scriptmode/athreads_si.cpp \
+    scriptmode/aparticlegenerator_si.cpp \
+    scriptmode/agstyle_si.cpp \
+    scriptmode/aconfig_si.cpp \
+    scriptmode/aevents_si.cpp \
+    scriptmode/arec_si.cpp \
+    scriptmode/apms_si.cpp \
+    scriptmode/alrf_si.cpp \
+    common/aeventtrackingrecord.cpp \
+    scriptmode/apthistory_si.cpp \
+    Simulation/atrackinghistorycrawler.cpp \
+    Simulation/aparticletracker.cpp \
+    common/aexternalprocesshandler.cpp \
+    gui/MainWindowTools/alogconfigdialog.cpp \
+    Simulation/alogsandstatisticsoptions.cpp \
+    Reconstruction/areconstructionworker.cpp \
+    common/ahistogram.cpp \
+    gui/GraphWindowTools/abasketitem.cpp \
+    gui/GraphWindowTools/abasketmanager.cpp \
+    gui/GraphWindowTools/adrawexplorerwidget.cpp \
+    gui/GraphWindowTools/adrawobject.cpp \
+    gui/GraphWindowTools/abasketlistwidget.cpp \
+    gui/GraphWindowTools/alegenddialog.cpp \
+    gui/MainWindowTools/aroottextconfigurator.cpp \
+    gui/aproxystyle.cpp \
+    gui/GraphWindowTools/aaxesdialog.cpp
 
 HEADERS  += common/CorrelationFilters.h \
     common/jsonparser.h \
     common/reconstructionsettings.h \
     common/generalsimsettings.h \
-    common/globalsettingsclass.h \
     common/tmpobjhubclass.h \
     common/agammarandomgenerator.h \
     common/apositionenergyrecords.h \
@@ -350,17 +441,14 @@ HEADERS  += common/CorrelationFilters.h \
     common/apmposangtyperecord.h \
     common/apmarraydata.h \
     common/ageoobject.h \
-    common/aopticaloverride.h \
+    OpticalOverrides/aopticaloverride.h \
     modules/detectorclass.h \
-    modules/particlesourcesclass.h \    
-    modules/flatfield.h \    
+    modules/flatfield.h \
     modules/sensorlrfs.h \
     modules/eventsdataclass.h \
     modules/dynamicpassiveshandler.h \
-    modules/processorclass.h \
     modules/manifesthandling.h \
     modules/apmgroupsmanager.h \
-    SplineLibrary/bspline3nu.h \
     SplineLibrary/spline.h \
     SplineLibrary/bspline.h \
     SplineLibrary/bspline3.h \
@@ -379,13 +467,12 @@ HEADERS  += common/CorrelationFilters.h \
     modules/lrf_v2/lrffactory.h \
     modules/lrf_v2/alrffitsettings.h \
     CUDA/cudamanagerclass.h \
-    scriptmode/interfacetoglobscript.h \
     scriptmode/scriptminimizer.h \
     scriptmode/ascriptexample.h \
     scriptmode/ascriptexampledatabase.h \
     scriptmode/ascriptinterface.h \
     modules/asandwich.h \
-    gui/MainWindowTools/slab.h \
+    common/aslab.h \
     common/aid.h \
     common/apoint.h \
     common/atransform.h \
@@ -406,107 +493,144 @@ HEADERS  += common/CorrelationFilters.h \
     modules/lrf_v3/alrftypemanagerinterface.h \
     modules/lrf_v3/astateinterface.h \
     modules/alrfmoduleselector.h \
-    common/acollapsiblegroupbox.h \
     common/ascriptvaluecopier.h \
-    gui/MainWindowTools/arootmarkerconfigurator.h \
     common/acustomrandomsampling.h \
-    gui/ahighlighters.h \
     common/amaterial.h \
     common/aparticle.h \
     modules/amaterialparticlecolection.h\
     common/ascriptvalueconverter.h \
-    scriptmode/ainterfacetowebsocket.h \
     common/ainternetbrowser.h \
-    Net/aroothttpserver.h \
     Net/anetworkmodule.h \
-    modules/lrf_v3/gui/atpspline3widget.h \
-    modules/lrf_v3/gui/avladimircompressionwidget.h \
     SplineLibrary/eiquadprog.hpp \
-    scriptmode/ainterfacetophotonscript.h \
     common/aphotonhistorylog.h \
     common/amonitor.h \
     common/aroothistappenders.h \
-    gui/MainWindowTools/amonitordelegateform.h \
     common/amonitorconfig.h \
     common/apeakfinder.h \
     common/amaterialcomposition.h \
-    gui/aelementandisotopedelegates.h \
-    gui/amatparticleconfigurator.h \
     common/aneutroninteractionelement.h \
-    gui/aneutronreactionsconfigurator.h \
-    gui/aneutronreactionwidget.h \
-    gui/aneutroninfodialog.h \
-    scriptmode/ainterfacetodeposcript.h \
-    scriptmode/ainterfacetomessagewindow.h \
-    scriptmode/coreinterfaces.h \
     scriptmode/localscriptinterfaces.h \
     scriptmode/histgraphinterfaces.h \
     common/amessageoutput.h \
-    gui/GraphWindowTools/atoolboxscene.h \
-    scriptmode/ainterfacetomultithread.h \
     scriptmode/ascriptinterfacefactory.h \
-    scriptmode/ascriptmessengerdialog.h \
     scriptmode/arootgraphrecord.h \
     common/arootobjcollection.h \
     scriptmode/aroothistrecord.h \
     common/arootobjbase.h \
     common/acalibratorsignalperphel.h \
-    modules/areconstructionmanager.h \
+    Reconstruction/areconstructionmanager.h \
     scriptmode/ajavascriptmanager.h \
     scriptmode/ascriptmanager.h \
     common/apm.h \
     modules/apmhub.h \
     common/apmtype.h \
-    scriptmode/ainterfacetoguiscript.h \
     modules/aoneevent.h \
-    scriptmode/ainterfacetottree.h \
     common/aroottreerecord.h \
-    gui/atextedit.h \
-    gui/alineedit.h \
-    scriptmode/ainterfacetoaddobjscript.h \
-    scriptmode/ainterfacetogstylescript.h \
     Net/awebsocketsessionserver.h \
     Net/awebsocketstandalonemessanger.h \
     Net/awebsocketsession.h \
-    gui/awebsocketserverdialog.h \
-    scriptmode/awebserverinterface.h
+    Net/agridrunner.h \
+    Net/aremoteserverrecord.h \
+    common/atrackbuildoptions.h \
+    OpticalOverrides/aopticaloverridescriptinterface.h \
+    OpticalOverrides/ascriptopticaloverride.h \
+    common/atracerstateful.h \
+    OpticalOverrides/fsnpopticaloverride.h \
+    OpticalOverrides/awaveshifteroverride.h \
+    OpticalOverrides/spectralbasicopticaloverride.h \
+    OpticalOverrides/abasicopticaloverride.h \
+    common/aglobalsettings.h \
+    common/aparticlesourcerecord.h \
+    Simulation/aparticlegun.h \
+    Simulation/ascriptparticlegenerator.h \
+    Simulation/afileparticlegenerator.h \
+    Simulation/aparticlerecord.h \
+    Simulation/asourceparticlegenerator.h \
+    common/aisotopeabundancehandler.h \
+    common/aisotope.h \
+    common/achemicalelement.h \
+    Simulation/ag4simulationsettings.h \
+    gui/ageant4configdialog.h \
+    scriptmode/asim_si.h \
+    scriptmode/amath_si.h \
+    scriptmode/atree_si.h \
+    scriptmode/aphoton_si.h \
+    scriptmode/acore_si.h \
+    scriptmode/ageo_si.h \
+    scriptmode/aserver_si.h \
+    scriptmode/aweb_si.h \
+    scriptmode/athreads_si.h \
+    scriptmode/aparticlegenerator_si.h \
+    scriptmode/agstyle_si.h \
+    scriptmode/aconfig_si.h \
+    scriptmode/aevents_si.h \
+    scriptmode/arec_si.h \
+    scriptmode/apms_si.h \
+    scriptmode/alrf_si.h \
+    common/aeventtrackingrecord.h \
+    scriptmode/apthistory_si.h \
+    Simulation/atrackinghistorycrawler.h \
+    Simulation/aparticletracker.h \
+    common/aexternalprocesshandler.h \
+    gui/MainWindowTools/alogconfigdialog.h \
+    Simulation/alogsandstatisticsoptions.h \
+    Reconstruction/afunctorbase.h \
+    Reconstruction/areconstructionworker.h \
+    common/ahistogram.h \
+    gui/GraphWindowTools/adrawobject.h \
+    gui/GraphWindowTools/abasketitem.h \
+    gui/GraphWindowTools/abasketmanager.h \
+    gui/GraphWindowTools/adrawexplorerwidget.h \
+    gui/GraphWindowTools/abasketlistwidget.h \
+    gui/GraphWindowTools/alegenddialog.h \
+    gui/MainWindowTools/aroottextconfigurator.h \
+    gui/aproxystyle.h \
+    gui/GraphWindowTools/aaxesdialog.h
 
 # --- SIM ---
 ants2_SIM {
     DEFINES += SIM
 
     SOURCES += common/asimulationstatistics.cpp \
-    modules/primaryparticletracker.cpp \
     modules/s1_generator.cpp \
     modules/photon_generator.cpp \
     modules/s2_generator.cpp \
-    modules/simulationmanager.cpp \
-    modules/phscatclaudiomodel.cpp \
-    modules/scatteronmetal.cpp \
+    OpticalOverrides/phscatclaudiomodel.cpp \
+    OpticalOverrides/scatteronmetal.cpp \
     modules/aphotontracer.cpp \
     modules/acompton.cpp \
-    modules/ageometrytester.cpp
+    modules/ageometrytester.cpp \
+    Simulation/atrackingdataimporter.cpp \
+    Simulation/anoderecord.cpp \
+    Simulation/asimulationmanager.cpp \
+    Simulation/asimulatorrunner.cpp \
+    Simulation/asimulator.cpp \
+    Simulation/apointsourcesimulator.cpp \
+    Simulation/aparticlesourcesimulator.cpp
 
     HEADERS  += common/agridelementrecord.h \
-    common/scanfloodstructure.h \
     common/aphoton.h \
     common/ageomarkerclass.h \
     common/atrackrecords.h \
     common/dotstgeostruct.h \
     common/aenergydepositioncell.h \
-    common/aparticleonstack.h \
     common/ahistoryrecords.h \
     common/asimulationstatistics.h \
-    modules/primaryparticletracker.h \
     modules/s1_generator.h \
     modules/photon_generator.h \
     modules/s2_generator.h \
-    modules/simulationmanager.h \
-    modules/phscatclaudiomodel.h \
-    modules/scatteronmetal.h \
+    OpticalOverrides/phscatclaudiomodel.h \
+    OpticalOverrides/scatteronmetal.h \
     modules/aphotontracer.h \
     modules/acompton.h \
-    modules/ageometrytester.h
+    modules/ageometrytester.h \
+    Simulation/atrackingdataimporter.h \
+    Simulation/anoderecord.h \
+    Simulation/asimulationmanager.h \
+    Simulation/asimulatorrunner.h \
+    Simulation/asimulator.h \
+    Simulation/apointsourcesimulator.h \
+    Simulation/aparticlesourcesimulator.h
 }
 
 # --- GUI ---
@@ -562,7 +686,36 @@ ants2_GUI {
     modules/lrf_v3/gui/corelrfswidgets.cpp \
     modules/lrf_v3/gui/alrfwindowwidgets.cpp \
     modules/lrf_v3/gui/alrfwindow.cpp \
-    gui/alrfdraw.cpp
+    gui/alrfdraw.cpp \
+    gui/MainWindowTools/arootmarkerconfigurator.cpp \
+    gui/ahighlighters.cpp \
+    modules/lrf_v3/gui/atpspline3widget.cpp \
+    modules/lrf_v3/gui/avladimircompressionwidget.cpp \
+    gui/MainWindowTools/amonitordelegateform.cpp \
+    gui/aelementandisotopedelegates.cpp \
+    gui/amatparticleconfigurator.cpp \
+    gui/aneutronreactionsconfigurator.cpp \
+    gui/aneutronreactionwidget.cpp \
+    gui/aneutroninfodialog.cpp \
+    gui/GraphWindowTools/atoolboxscene.cpp \
+    scriptmode/ascriptmessengerdialog.cpp \
+    gui/atextedit.cpp \
+    gui/alineedit.cpp \
+    gui/awebsocketserverdialog.cpp \
+    common/acollapsiblegroupbox.cpp \
+    gui/MainWindowTools/slabdelegate.cpp \
+    gui/aremotewindow.cpp \
+    gui/MainWindowTools/atrackdrawdialog.cpp \
+    gui/aserverdelegate.cpp \
+    gui/MainWindowTools/aopticaloverridedialog.cpp \
+    gui/MainWindowTools/aopticaloverridetester.cpp \
+    scriptmode/amsg_si.cpp \
+    scriptmode/agui_si.cpp \
+    scriptmode/ageowin_si.cpp \
+    scriptmode/agraphwin_si.cpp \
+    scriptmode/aoutwin_si.cpp \
+    gui/MainWindowTools/aparticlesourcedialog.cpp \
+    gui/aguiwindow.cpp
 
 HEADERS  += gui/mainwindow.h \
     gui/materialinspectorwindow.h \
@@ -597,8 +750,36 @@ HEADERS  += gui/mainwindow.h \
     modules/lrf_v3/gui/corelrfswidgets.h \
     modules/lrf_v3/gui/alrfwindowwidgets.h \
     modules/lrf_v3/gui/alrfwindow.h \
-    gui/alrfdraw.h
-
+    gui/alrfdraw.h \
+    gui/MainWindowTools/arootmarkerconfigurator.h \
+    gui/ahighlighters.h \
+    modules/lrf_v3/gui/atpspline3widget.h \
+    modules/lrf_v3/gui/avladimircompressionwidget.h \
+    gui/MainWindowTools/amonitordelegateform.h \
+    gui/aelementandisotopedelegates.h \
+    gui/amatparticleconfigurator.h \
+    gui/aneutronreactionsconfigurator.h \
+    gui/aneutronreactionwidget.h \
+    gui/aneutroninfodialog.h \
+    gui/GraphWindowTools/atoolboxscene.h \
+    scriptmode/ascriptmessengerdialog.h \
+    gui/atextedit.h \
+    gui/alineedit.h \
+    gui/MainWindowTools/slabdelegate.h \
+    common/acollapsiblegroupbox.h \
+    gui/awebsocketserverdialog.h \
+    gui/aremotewindow.h \
+    gui/MainWindowTools/atrackdrawdialog.h \
+    gui/aserverdelegate.h \
+    gui/MainWindowTools/aopticaloverridedialog.h \
+    gui/MainWindowTools/aopticaloverridetester.h \
+    scriptmode/amsg_si.h \
+    scriptmode/agui_si.h \
+    scriptmode/ageowin_si.h \
+    scriptmode/agraphwin_si.h \
+    scriptmode/aoutwin_si.h \
+    gui/MainWindowTools/aparticlesourcedialog.h \
+    gui/aguiwindow.h
 
 FORMS += gui/mainwindow.ui \
     gui/materialinspectorwindow.ui \
@@ -620,32 +801,53 @@ FORMS += gui/mainwindow.ui \
     gui/MainWindowTools/agridelementdialog.ui \
     gui/ascriptexampleexplorer.ui \
     gui/ascriptwindow.ui \
-    modules/lrf_v3/gui/alrfwindow.ui
+    modules/lrf_v3/gui/alrfwindow.ui \
+    gui/MainWindowTools/amonitordelegateform.ui \
+    gui/amatparticleconfigurator.ui \
+    gui/aneutronreactionsconfigurator.ui \
+    gui/aneutronreactionwidget.ui \
+    gui/aneutroninfodialog.ui \
+    gui/awebsocketserverdialog.ui \
+    gui/aremotewindow.ui \
+    gui/MainWindowTools/atrackdrawdialog.ui \
+    gui/MainWindowTools/aopticaloverridedialog.ui \
+    gui/MainWindowTools/aopticaloverridetester.ui \
+    gui/MainWindowTools/aparticlesourcedialog.ui
 
 INCLUDEPATH += gui
 INCLUDEPATH += gui/RasterWindow
 INCLUDEPATH += gui/ReconstructionWindowTools
 INCLUDEPATH += modules/lrf_v3/gui
+INCLUDEPATH += gui/GraphWindowTools
 }
 
 INCLUDEPATH += gui/MainWindowTools
-INCLUDEPATH += gui/GraphWindowTools
+
 INCLUDEPATH += SplineLibrary
+INCLUDEPATH += OpticalOverrides
 INCLUDEPATH += modules
 INCLUDEPATH += modules/lrf_v2
 INCLUDEPATH += modules/lrf_v3
 INCLUDEPATH += common
 INCLUDEPATH += scriptmode
 INCLUDEPATH += Net
+INCLUDEPATH += Simulation
+INCLUDEPATH += Reconstruction
 
 RESOURCES += \
     Resources.qrc
 #-------------
 
 #---Qt kitchen---
-QT += core gui
-QT += websockets
+QT += core
+ants2_GUI {
+    QT += gui
+} else {
+    QT -= gui
+}
+# couldn't get of widgets yet due to funny compile erors - VS
 QT += widgets
+QT += websockets
 QT += script #scripts support
 win32:QT += winextras  #used in windownavigator only
 
@@ -657,9 +859,12 @@ TEMPLATE = app
 RC_FILE = myapp.rc
 #------------
 
+# The next define allows the core script interface to launch external processes. Enable only if you know what are you doing
+#DEFINES += _ALLOW_LAUNCH_EXTERNAL_PROCESS_
+
 #---Optimization of compilation---
 win32 {
-  #uncomment the next two lines to disable optimization during compilation. It will drastically shorten compilation time, but there are performance loss, especially strong for LRF computation
+  #when the next two lines are NOT commented, optimization during compilation is disabled. It will drastically shorten compilation time on MSVC2013, but there are performance loss, especially strong for LRF computation
   QMAKE_CXXFLAGS_RELEASE -= -O2
   QMAKE_CXXFLAGS_RELEASE *= -Od
 }
@@ -672,6 +877,7 @@ linux-g++ || unix {
 win32 {
   #CONFIG   += console                  #enable to add standalone console for Windows
   DEFINES  += _CRT_SECURE_NO_WARNINGS   #disable microsoft spam
+  DEFINES  += _LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER #disables warning C4068: unknown pragma
   #DEFINES += WINDOWSBIN                #enable for compilation in Windows binary-only mode
 }
 #------------
@@ -698,6 +904,12 @@ win32 {
         todir ~= s,/,\\,g
         fromdir ~= s,/,\\,g
         QMAKE_POST_LINK = $$quote(cmd /c xcopy \"$${fromdir}\" \"$${todir}\" /y /e /i$$escape_expand(\n\t))
+
+        todir = $${OUT_PWD}/DATA
+        fromdir = $${PWD}/DATA
+        todir ~= s,/,\\,g
+        fromdir ~= s,/,\\,g
+        QMAKE_PRE_LINK = $$quote(cmd /c xcopy \"$${fromdir}\" \"$${todir}\" /y /e /i$$escape_expand(\n\t))
       }
 
 linux-g++ {
@@ -705,6 +917,10 @@ linux-g++ {
    todir = $${OUT_PWD}
    fromdir = $${PWD}/EXAMPLES
    QMAKE_POST_LINK = $$quote(cp -rf \"$${fromdir}\" \"$${todir}\"$$escape_expand(\n\t))
+
+   todir = $${OUT_PWD}
+   fromdir = $${PWD}/DATA
+   QMAKE_PRE_LINK = $$quote(cp -rf \"$${fromdir}\" \"$${todir}\"$$escape_expand(\n\t))
 }
 
 unix {
@@ -712,13 +928,17 @@ unix {
    todir = $${OUT_PWD}
    fromdir = $${PWD}/EXAMPLES
    QMAKE_POST_LINK = $$quote(cp -rf \"$${fromdir}\" \"$${todir}\"$$escape_expand(\n\t))
+
+   todir = $${OUT_PWD}
+   fromdir = $${PWD}/DATA
+   QMAKE_PRE_LINK = $$quote(cp -rf \"$${fromdir}\" \"$${todir}\"$$escape_expand(\n\t))
 }
 #------------
 
 FORMS += \
-    gui/MainWindowTools/amonitordelegateform.ui \
-    gui/amatparticleconfigurator.ui \
-    gui/aneutronreactionsconfigurator.ui \
-    gui/aneutronreactionwidget.ui \
-    gui/aneutroninfodialog.ui \
-    gui/awebsocketserverdialog.ui
+    gui/ageant4configdialog.ui \
+    gui/MainWindowTools/alogconfigdialog.ui \
+    gui/GraphWindowTools/alegenddialog.ui \
+    gui/MainWindowTools/aroottextconfigurator.ui \
+    gui/GraphWindowTools/aaxesdialog.ui
+

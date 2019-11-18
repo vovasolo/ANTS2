@@ -13,6 +13,8 @@
 #include <QTextEdit>
 #include <QPainter>
 #include <QTextBlock>
+#include <QTextDocumentFragment>
+#include <QClipboard>
 
 ATextEdit::ATextEdit(QWidget *parent) : QPlainTextEdit(parent), c(0)
 {
@@ -40,12 +42,21 @@ void ATextEdit::setCompleter(QCompleter *completer)
 
 void ATextEdit::keyPressEvent(QKeyEvent *e)
 {
-
     QTextCursor tc = this->textCursor();
 
     //simple cases handle with switch
     switch (e->key())
     {
+        case Qt::Key_V :
+        {
+            if (e->modifiers() & Qt::ControlModifier)
+            {
+                paste();
+                return;
+            }
+        }
+        break;
+
         case Qt::Key_Tab :
         {
             if (e->modifiers() == 0 && !(c && c->popup()->isVisible()) )
@@ -192,7 +203,7 @@ void ATextEdit::keyPressEvent(QKeyEvent *e)
         tc.select(QTextCursor::LineUnderCursor);
         QString line = tc.selectedText();
         int startingSpaces = 0;
-        for (int i=0; line.size(); i++)
+        for (int i=0; i<line.size(); i++)
           {
             if (line.at(i) != QChar::Space) break;
             else startingSpaces++;
@@ -289,10 +300,49 @@ void ATextEdit::keyPressEvent(QKeyEvent *e)
         // The following keys are forwarded by the completer to the widget
         switch (e->key())
         {
+        case Qt::Key_Tab:
+          {
+            //qDebug() << "Tab pressed when completer is active";
+            //QString startsWith = c->completionPrefix();
+            int i = 0;
+            QAbstractItemModel * m = c->completionModel();
+            QStringList sl;
+            while (m->hasIndex(i, 0)) sl << m->data(m->index(i++, 0)).toString();
+            if (sl.size() < 2)
+            {
+                e->ignore(); // let the completer do default behavior
+                return;
+            }
+            QString root = sl.first();
+            for (int isl=1; isl<sl.size(); isl++)
+            {
+                const QString & item = sl.at(isl);
+                if (root.length() > item.length())
+                    root.truncate(item.length());
+                for (int i = 0; i < root.length(); ++i)
+                {
+                    if (root[i] != item[i])
+                    {
+                        root.truncate(i);
+                        break;
+                    }
+                }
+            }
+            //qDebug() << root;
+            if (root.isEmpty())
+            {
+                //do nothing
+            }
+            else
+            {
+                insertCompletion(root);
+                c->popup()->setCurrentIndex(c->completionModel()->index(0, 0));
+            }
+            return;
+          }
         case Qt::Key_Enter:
         case Qt::Key_Return:
         case Qt::Key_Escape:
-        case Qt::Key_Tab:
         case Qt::Key_Backtab:
             e->ignore(); // let the completer do default behavior
             return;
@@ -494,6 +544,12 @@ void ATextEdit::insertCompletion(const QString &completion)
 
 bool ATextEdit::findInList(QString text, QString& tmp) const
 {
+    if (DeprecatedOrRemovedMethods && DeprecatedOrRemovedMethods->contains(text))
+    {
+        tmp = DeprecatedOrRemovedMethods->value(text);
+        return true;
+    }
+
   for (int i=0; i<functionList.size(); i++)
     {
       tmp = functionList.at(i);
@@ -655,7 +711,7 @@ bool ATextEdit::TryShowFunctionTooltip(QTextCursor* cursor)
 
     if (fFound)
     {
-        QToolTip::showText( mapToGlobal( QPoint(cursorRect(*cursor).topRight().x(), cursorRect(*cursor).topRight().y()-2.2*fh) ),
+        QToolTip::showText( mapToGlobal( QPoint(cursorRect(*cursor).topRight().x(), cursorRect(*cursor).topRight().y() -3.0*fh )),
                                     tmp,
                                     this,
                                     QRect(),
@@ -826,6 +882,141 @@ void ATextEdit::setTextCursorSilently(const QTextCursor &tc)
     bMonitorLineChange = false;
     setTextCursor(tc);
     bMonitorLineChange = true;
+}
+
+int ATextEdit::getIndent(const QString& line) const
+{
+    int indent = 0;
+    if (!line.isEmpty())
+    {
+        for (indent = 0; indent<line.size(); indent++)
+            if (line.at(indent) != ' ') break;
+
+        if (indent == line.size()) indent = -1;
+    }
+    return indent;
+}
+
+void ATextEdit::setIndent(QString &line, int indent)
+{
+    line = line.trimmed();
+
+    const QString spaces = QString(indent, ' ');
+    line.insert(0, spaces);
+}
+
+void ATextEdit::convertTabToSpaces(QString& line)
+{
+    for (int i=line.size()-1; i>-1; i--)
+        if (line.at(i) == '\t')
+        {
+            line.remove(i, 1);
+            const QString spaces = QString(ATextEdit::TabInSpaces, ' ');
+            line.insert(i, spaces);
+        }
+}
+
+int ATextEdit::getSectionCounterChange(const QString& line) const
+{
+    int counter = 0;
+    int bComment = false;
+    for (int i=0; i<line.size(); i++)
+    {
+        const QChar & ch = line.at(i);
+        // ***!!! add ignore commented inside /* */
+        if      (ch == '{' ) counter++;
+        else if (ch == '}' ) counter--;
+        else if (ch == "/")
+        {
+            if (bComment) break;
+            else bComment = true;
+        }
+        else bComment = false;
+    }
+    return counter;
+}
+
+void ATextEdit::paste()
+{
+    QClipboard *clipboard = QApplication::clipboard();
+    QString text = clipboard->text();
+    QStringList lines = text.split('\n');
+    if (text.isEmpty() || lines.isEmpty())
+    {
+        QPlainTextEdit::paste(); //just in case, but most likely it is empty
+        return;
+    }
+
+    QTextCursor tc = textCursor();
+    tc.movePosition(QTextCursor::StartOfLine, QTextCursor::KeepAnchor);
+    QString s = tc.selectedText();
+    s.remove(' ');
+    if (s.isEmpty())
+    {
+        //  qDebug() << "Adjusting ident";
+        tc = textCursor();
+        int newIdent = textCursor().positionInBlock();
+
+        QString toInsert;
+        for (int i=0; i<lines.size(); i++)
+        {
+            QString modLine = lines.at(i);
+            if (i != lines.size()-1) modLine += "\n";
+            if (i != 0) modLine = QString(newIdent, ' ') + modLine;
+            toInsert += modLine;
+        }
+        tc.insertText( toInsert );
+    }
+    else
+    {
+        //  qDebug() << "Not empty, using regular paste";
+        QPlainTextEdit::paste(); //just in case, but most likely it is empty
+    }
+}
+
+void ATextEdit::align()
+{
+    QTextCursor tc = textCursor();
+    int start = tc.anchor();
+    int stop = tc.position();
+    if (start > stop) std::swap(start, stop);
+
+    tc.setPosition(stop, QTextCursor::MoveAnchor);
+    tc.movePosition(QTextCursor::EndOfLine, QTextCursor::MoveAnchor);
+    tc.setPosition(start, QTextCursor::KeepAnchor);
+    tc.movePosition(QTextCursor::StartOfLine, QTextCursor::KeepAnchor);
+
+    QString text = tc.selection().toPlainText();
+    if (text.isEmpty()) return;
+
+    QStringList list = text.split('\n');
+    if (list.size() <= 1) return;
+
+    for (QString& s : list) convertTabToSpaces(s);
+
+    int currentIndent = getIndent(list.first());
+    const int size = list.size();
+    for (int i = 1; i <= size; i++)
+    {
+        int deltaSections = getSectionCounterChange(list.at(i-1));
+
+        if (deltaSections >= 0)
+        {
+            currentIndent += deltaSections * TabInSpaces;
+            //no need to adjust the previous line
+        }
+        else
+        {
+            currentIndent += deltaSections * TabInSpaces;
+            if (currentIndent < 0) currentIndent = 0;
+            setIndent(list[i-1], currentIndent);
+        }
+        if (i != size)
+            setIndent(list[i], currentIndent);
+    }
+
+    QString res = list.join('\n');
+    tc.insertText(res);
 }
 
 QString ATextEdit::textUnderCursor() const

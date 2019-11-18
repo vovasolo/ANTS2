@@ -1,7 +1,7 @@
 #ifndef RECONSTRUCTIONWINDOW_H
 #define RECONSTRUCTIONWINDOW_H
 
-#include <QMainWindow>
+#include "aguiwindow.h"
 #include <QStandardItemModel>
 
 #include "TMathBase.h"
@@ -60,7 +60,7 @@ struct TreeViewStruct
     void fillCustom(bool fCustomBins, bool fCustomRanges, QVector<linkCustomClass> &cus);
 };
 
-class ReconstructionWindow : public QMainWindow
+class ReconstructionWindow : public AGuiWindow
 {
   Q_OBJECT
   
@@ -145,6 +145,7 @@ public slots:
   //can be triggered by script
   void on_pbReconstructAll_clicked();
   void ConfigurePlotXY(int binsX, double X0, double X1, int binsY, double Y0, double Y1);
+  void ConfigurePlotXYextra(bool suppress0, bool plotVsTrue, bool showPMs, bool showManifest, bool invertX, bool invertY);
   void DoPlotXY(int i);
   void DoBlur(double sigma, int type = 0);  //type 0 - uniform, type 1 - gauss
   void DoCenterShift(int ipm);
@@ -536,8 +537,9 @@ private slots:
 
   void on_ledFromPeaksThreshold_editingFinished();
 
-protected:
-    bool event(QEvent *event);
+  void on_pbRootConfigureCustom_clicked();
+
+  void on_cobLSminimizeWhat_currentIndexChanged(int index);
 
 private:
   Ui::ReconstructionWindow *ui;
@@ -575,6 +577,8 @@ private:
   QString FilterScript;
 
   int ManifestLineColor, ManifestLineStyle, ManifestLineWidth;
+
+  QString RootMinFormula = "-Signal * log(LRF) + LRF";
 
   void DrawPolygon(double z);  
   void PolygonToTable();
@@ -626,7 +630,7 @@ public slots:
   void onKNNreadyXchanged(bool ready, int events);
   void onKNNreadyYchanged(bool ready, int events);
 
-  void ShowPositions(int Rec_True, bool fOnlyIfWindowVisible = false);
+  const QString ShowPositions(int Rec_True, bool fOnlyIfWindowVisible = false);
 signals:
 
   void cbReconstructEnergyChanged(bool changed);

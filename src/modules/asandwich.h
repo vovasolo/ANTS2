@@ -13,6 +13,7 @@ class TGeoManager;
 class TGeoVolume;
 class AMaterialParticleCollection;
 class AGridElementRecord;
+class TGeoNode;
 
 struct APMandDummy
 {
@@ -52,7 +53,7 @@ public:
 
   //grid
   void convertObjToGrid(AGeoObject *obj);
-  void shapeGrid(AGeoObject* obj, int shape, double p0, double p1, double p2);
+  void shapeGrid(AGeoObject* obj, int shape, double p0, double p1, double p2, int wireMat);
   //parallel - 0, pitch, length, wireDiameter
   //mesh - 1, pitchX, pitchY, wireDiameter
   //hexa - 2, outer circle diameter, inner circle diameter, full height
@@ -75,6 +76,7 @@ public:
   //int FindSlabByName(QString name); //returns -1 if not found
   void DeleteMaterial(int imat);
   bool isVolumeExist(QString name);
+  void changeLineWidthOfVolumes(int delta);
 
   // JSON
   void writeToJson(QJsonObject& json);
@@ -92,6 +94,8 @@ public:
 
   // pointers to monitors
   QVector<const AGeoObject*> MonitorsRecords;
+  QVector<QString> MonitorIdNames; //runtime
+  QVector<TGeoNode *> MonitorNodes; //runtime
 
   // available after calculation of Z of layers
   double Z_UpperBound, Z_LowerBound;

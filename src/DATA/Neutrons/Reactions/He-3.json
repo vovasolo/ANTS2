@@ -1,0 +1,29 @@
+{
+"DecayScenarios": [
+	{
+		"Branching": 1,
+		"GeneratedParticles": [
+			{
+				"Energy": 573,
+				"OpositeDirectionWithPrevious": false,
+				"Particle": {
+					"A": -1,
+                    "Name": "proton",
+                    "Type": 1,
+                    "Z": -1
+				}
+			},
+			{
+				"Energy": 191,
+				"OpositeDirectionWithPrevious": true,
+				"Particle": {
+                 	"A": -1,
+                    "Name": "triton",
+                    "Type": 1,
+                    "Z": -1
+				}
+			}
+		]
+	}
+]
+}

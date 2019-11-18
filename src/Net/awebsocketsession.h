@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QVariant>
 #include <QByteArray>
+#include <QAbstractSocket>
 
 class QWebSocket;
 class QJsonObject;
@@ -16,25 +17,30 @@ public:
     AWebSocketSession();
     ~AWebSocketSession();
 
-    bool  connect(const QString& Url);
-    void  disconnect();
-    int   ping();
-    bool  sendText(const QString& message);
-    bool  sendJson(const QJsonObject& json);
-    bool  sendFile(const QString& fileName);
+    bool  Connect(const QString& Url, bool WaitForAnswer = true);
+    void  Disconnect();
+    int   Ping();
+    bool  SendText(const QString& message);
+    bool  SendJson(const QJsonObject& json);
+    bool  SendQByteArray(const QByteArray& ba);
+    bool  SendFile(const QString& fileName);
 
-    bool  resumeWaitForAnswer();
+    bool  ResumeWaitForAnswer();
 
-    void  clearReply();
+    void  ClearReply();
 
-    const QString&    getError() const {return Error;}
-    const QString&    getTextReply() const {return TextReply;}
-    const QByteArray& getBinaryReply() const {return BinaryReply;}
-    bool              isBinaryReplyEmpty() const {return BinaryReply.isEmpty();}
+    const QString&    GetError() const {return Error;}
+    const QString&    GetTextReply() const {return TextReply;}
+    const QByteArray& GetBinaryReply() const {return BinaryReply;}
+    bool              IsBinaryReplyEmpty() const {return BinaryReply.isEmpty();}
 
-    void  externalAbort();
+    void  ExternalAbort();
 
-    void  setTimeout(int milliseconds) {timeout = milliseconds;}
+    void  SetTimeout(int milliseconds) {timeout = milliseconds;}
+    void  SetIntervalBetweenEventProcessing(int milliseconds) {sleepDuration = milliseconds;}
+    quint16 GetPeerPort() {return peerPort;} //used as part of the unique names for remote files
+
+    bool ConfirmSendPossible();
 
 public:
     enum  ServerState {Idle = 0, Connecting, ConnectionFailed, Connected, Aborted};
@@ -45,9 +51,13 @@ private slots:
     void  onTextMessageReceived(const QString& message);
     void  onBinaryMessageReceived(const QByteArray &message);
 
+    //void  onStateChanged(QAbstractSocket::SocketState state);
+
 private:
     QWebSocket* socket = 0;
     int timeout = 3000;
+    int timeoutForDisconnect = 3000;
+    ulong sleepDuration = 50;
 
     ServerState State = Idle;
     QString Error;
@@ -58,8 +68,9 @@ private:
     QString TextReply;
     QByteArray BinaryReply;
 
-private:
-    bool confirmSendPossible();
+    quint16 peerPort = 0;
+
+private:    
     bool waitForReply();
 };
 

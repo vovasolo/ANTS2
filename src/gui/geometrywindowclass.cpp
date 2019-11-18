@@ -7,13 +7,26 @@
 #include "windownavigatorclass.h"
 #include "detectorclass.h"
 #include "rasterwindowbaseclass.h"
-#include "globalsettingsclass.h"
+#include "aglobalsettings.h"
 #include "ajsontools.h"
 #include "amessage.h"
+#include "asandwich.h"
+#include "anetworkmodule.h"
+#include "ageomarkerclass.h"
 
+#include <QStringList>
 #include <QDebug>
 #include <QFileDialog>
 #include <QDesktopServices>
+#include <QVBoxLayout>
+
+#ifdef __USE_ANTS_JSROOT__
+    #include <QWebEngineView>
+    #include <QWebEnginePage>
+    #include <QWebEngineProfile>
+    #include <QWebEngineDownloadItem>
+    #include "aroothttpserver.h"
+#endif
 
 #include "TView3D.h"
 #include "TView.h"
@@ -21,55 +34,212 @@
 #include "TVirtualGeoTrack.h"
 
 GeometryWindowClass::GeometryWindowClass(QWidget *parent, MainWindow *mw) :
-  QMainWindow(parent),
+  AGuiWindow(parent), MW(mw),
   ui(new Ui::GeometryWindowClass)
 {    
-  RasterWindow = 0;
-  QWinContainer = 0;
-  ColdStart = 0;
-  BarShown = true;
-  TMPignore = false;
-  ModePerspective = true;
-  fRecallWindow = false;
-  GeoMarkerSize = 2;
-  GeoMarkerStyle = 6;
-  ZoomLevel = 2;
-  fNeedZoom = true;
+    ui->setupUi(this);
 
-  MW = mw;
-  ui->setupUi(this);
+    Qt::WindowFlags windowFlags = (Qt::Window | Qt::CustomizeWindowHint);
+    windowFlags |= Qt::WindowCloseButtonHint;
+    windowFlags |= Qt::WindowMinimizeButtonHint;
+    windowFlags |= Qt::WindowMaximizeButtonHint;
+    windowFlags |= Qt::Tool;
+    this->setWindowFlags( windowFlags );
 
-  Qt::WindowFlags windowFlags = (Qt::Window | Qt::CustomizeWindowHint);
-  windowFlags |= Qt::WindowCloseButtonHint;
-  windowFlags |= Qt::WindowMinimizeButtonHint;
-  windowFlags |= Qt::WindowMaximizeButtonHint;
-  this->setWindowFlags( windowFlags );
+    this->setMinimumWidth(200);
 
-  this->setMinimumWidth(200);
-  RasterWindow = new RasterWindowBaseClass(this);
-  RasterWindow->resize(400, 400);
-  RasterWindow->ForceResize();
+    RasterWindow = new RasterWindowBaseClass(this);
+    //centralWidget()->layout()->addWidget(RasterWindow);
+    connect(RasterWindow, &RasterWindowBaseClass::UserChangedWindow, this, &GeometryWindowClass::onRasterWindowChange);
 
-  QWinContainer = QWidget::createWindowContainer(RasterWindow, this);
-  QWinContainer->setVisible(true);
-  connect(RasterWindow, SIGNAL(UserChangedWindow(Double_t,Double_t,Double_t,Double_t,Double_t,Double_t)),
-          this, SLOT(onRasterWindowChange(Double_t,Double_t,Double_t,Double_t,Double_t,Double_t)));  
+    QVBoxLayout * layV = new QVBoxLayout();
+    layV->setContentsMargins(0,0,0,0);
+    layV->addWidget(RasterWindow);
+    ui->swViewers->widget(0)->setLayout(layV);
 
-  QActionGroup* group = new QActionGroup( this );
-  ui->actionSmall_dot->setActionGroup(group);
-  ui->actionLarge_dot->setActionGroup(group);
-  ui->actionSmall_cross->setActionGroup(group);
-  ui->actionLarge_cross->setActionGroup(group);
+#ifdef __USE_ANTS_JSROOT__
+    WebView = new QWebEngineView(this);
+    layV = new QVBoxLayout();
+        layV->setContentsMargins(0,0,0,0);
+        layV->addWidget(WebView);
+    ui->swViewers->widget(1)->setLayout(layV);
+    //WebView->load(QUrl("http://localhost:8080/?nobrowser&item=Objects/GeoWorld/world&opt=dray;all;tracks;transp50"));
+    QWebEngineProfile::defaultProfile()->connect(QWebEngineProfile::defaultProfile(), &QWebEngineProfile::downloadRequested,
+                                                 this, &GeometryWindowClass::onDownloadPngRequested);
+#endif
+
+    QActionGroup* group = new QActionGroup( this );
+    ui->actionSmall_dot->setActionGroup(group);
+    ui->actionLarge_dot->setActionGroup(group);
+    ui->actionSmall_cross->setActionGroup(group);
+    ui->actionLarge_cross->setActionGroup(group);
+
+    ui->cbWireFrame->setVisible(false);
 }
 
 GeometryWindowClass::~GeometryWindowClass()
 {
   delete ui;
-
-  //RasterWindow->setParent(0);
-  //delete RasterWindow;
-  //delete QWinContainer;
 }
+
+void GeometryWindowClass::adjustGeoAttributes(TGeoVolume * vol, int Mode, int transp, bool adjustVis, int visLevel, int currentLevel)
+{
+    const int totNodes = vol->GetNdaughters();
+    for (int i=0; i<totNodes; i++)
+    {
+        TGeoNode* thisNode = (TGeoNode*)vol->GetNodes()->At(i);
+        TGeoVolume * v = thisNode->GetVolume();
+        v->SetTransparency(Mode == 0 ? 0 : transp);
+        if (Mode != 0)
+        {
+            if (adjustVis)
+                v->SetAttBit(TGeoAtt::kVisOnScreen, (currentLevel < visLevel) );
+            else
+                v->SetAttBit(TGeoAtt::kVisOnScreen, true );
+        }
+
+        adjustGeoAttributes(v, Mode, transp, adjustVis, visLevel, currentLevel+1);
+    }
+}
+
+void GeometryWindowClass::prepareGeoManager(bool ColorUpdateAllowed)
+{
+    if (!MW->Detector->top) return;
+
+    int Mode = ui->cobViewer->currentIndex(); // 0 - standard, 1 - jsroot
+
+    //root segments for roundish objects
+    MW->Detector->GeoManager->SetNsegments(MW->GlobSet.NumSegments);
+
+    //control of visibility of inner volumes
+    int level = ui->sbLimitVisibility->value();
+    if (!ui->cbLimitVisibility->isChecked()) level = -1;
+    MW->Detector->GeoManager->SetVisLevel(level);
+
+    if (ColorUpdateAllowed)
+    {
+        if (ColorByMaterial) MW->Detector->colorVolumes(1);
+        else MW->Detector->colorVolumes(0);
+    }
+
+    MW->Detector->GeoManager->SetTopVisible(ui->cbShowTop->isChecked());
+    //in this way jsroot have no problem to update visibility of top:
+    //MW->Detector->GeoManager->SetTopVisible(true);
+    //MW->Detector->top->SetVisibility(ui->cbShowTop->isChecked());
+    MW->Detector->top->SetAttBit(TGeoAtt::kVisOnScreen, ui->cbShowTop->isChecked());
+
+    int transp = ui->sbTransparency->value();
+    MW->Detector->top->SetTransparency(Mode == 0 ? 0 : transp);
+    adjustGeoAttributes(MW->Detector->top, Mode, transp, ui->cbLimitVisibility->isChecked(), level, 0);
+
+    //making contaners visible
+    MW->Detector->top->SetVisContainers(true);
+}
+
+void GeometryWindowClass::ShowGeometry(bool ActivateWindow, bool SAME, bool ColorUpdateAllowed)
+{
+    //qDebug()<<"  ----Showing geometry----" << MW->GeometryDrawDisabled;
+    if (MW->GeometryDrawDisabled) return;
+
+    prepareGeoManager(ColorUpdateAllowed);
+
+    int Mode = ui->cobViewer->currentIndex(); // 0 - standard, 1 - jsroot
+
+    if (Mode == 0)
+    {
+        if (ActivateWindow) ShowAndFocus(); //window is activated (focused)
+        else SetAsActiveRootWindow(); //no activation in this mode
+
+        //DRAW
+        fNeedZoom = true;
+        setHideUpdate(true);
+        ClearRootCanvas();
+        if (SAME) MW->Detector->top->Draw("SAME");
+        else      MW->Detector->top->Draw("");
+        PostDraw();
+
+        //drawing dots
+        MW->ShowGeoMarkers();
+        UpdateRootCanvas();
+    }
+    else
+    {
+#ifdef __USE_ANTS_JSROOT__
+        //qDebug() << "Before:" << gGeoManager->GetListOfTracks()->GetEntriesFast() << "markers: "<< MW->GeoMarkers.size();
+
+        //deleting old markers
+        TObjArray * Arr = gGeoManager->GetListOfTracks();
+        const int numObj = Arr->GetEntriesFast();
+        int iObj = 0;
+        for (; iObj<numObj; iObj++)
+            if (!dynamic_cast<TVirtualGeoTrack*>(Arr->At(iObj))) break;
+        if (iObj < numObj)
+        {
+            //qDebug() << "First non-track object:"<<iObj;
+            for (int iMarker=iObj; iMarker<numObj; iMarker++)
+            {
+                delete Arr->At(iMarker);
+                (*Arr)[iMarker] = nullptr;
+            }
+            Arr->Compress();
+        }
+        //qDebug() << "After filtering markers:"<<gGeoManager->GetListOfTracks()->GetEntriesFast();
+
+        if (!MW->GeoMarkers.isEmpty())
+        {
+            for (int i=0; i<MW->GeoMarkers.size(); i++)
+            {
+                GeoMarkerClass* gm = MW->GeoMarkers[i];
+                //overrides
+                if (gm->Type == "Recon" || gm->Type == "Scan" || gm->Type == "Nodes")
+                {
+                    gm->SetMarkerStyle(GeoMarkerStyle);
+                    gm->SetMarkerSize(GeoMarkerSize);
+                }
+
+                TPolyMarker3D * mark = new TPolyMarker3D(*gm);
+                gGeoManager->GetListOfTracks()->Add(mark);
+            }
+        }
+        //qDebug() << "After:" << gGeoManager->GetListOfTracks()->GetEntriesFast();
+
+        MW->NetModule->onNewGeoManagerCreated();
+
+        QWebEnginePage * page = WebView->page();
+        QString js = "var painter = JSROOT.GetMainPainter(\"onlineGUI_drawing\");";
+        js += QString("painter.setAxesDraw(%1);").arg(ui->cbShowAxes->isChecked());
+        js += QString("painter.setWireFrame(%1);").arg(ui->cbWireFrame->isChecked());
+        js += QString("JSROOT.GEO.GradPerSegm = %1;").arg(ui->cbWireFrame->isChecked() ? 360 / MW->GlobSet.NumSegments : 6);
+        js += QString("painter.setShowTop(%1);").arg(ui->cbShowTop->isChecked() ? "true" : "false");
+        js += "if (JSROOT.hpainter) JSROOT.hpainter.updateAll();";
+        page->runJavaScript(js);
+#endif
+    }
+}
+
+/*
+page->runJavaScript("JSROOT.GetMainPainter(\"onlineGUI_drawing\").produceCameraUrl(6)", [page](const QVariant &v)
+{
+    QString reply = v.toString();
+    qDebug() << reply;
+    QStringList sl = reply.split(',', QString::SkipEmptyParts); //quick parse just for now
+    if (sl.size() > 2)
+    {
+        QString s;
+        //s += "roty" + ui->leY->text() + ",";
+        s += sl.at(0) + ",";
+        //s += "rotz" + ui->leZ->text() + ",";
+        s += sl.at(1) + ",";
+        //s += "zoom" + ui->leZoom->text() + ",";
+        s += sl.at(2) + ",";
+        s += "dray,nohighlight,all,tracks,transp50";
+        qDebug() << s;
+
+        page->runJavaScript("JSROOT.redraw(\"onlineGUI_drawing\", JSROOT.GetMainPainter(\"onlineGUI_drawing\").GetObject(), \"" + s + "\");");
+    }
+});
+*/
+
 
 void GeometryWindowClass::ShowAndFocus()
 {
@@ -77,14 +247,6 @@ void GeometryWindowClass::ShowAndFocus()
   this->show();
   this->activateWindow();
   this->raise();
-
-  if (ColdStart)
-    {
-      //first time this window is shown
-      ColdStart = false;
-      this->resize(width()+1, height());
-      this->resize(width()-1, height());
-    }
 }
 
 void GeometryWindowClass::SetAsActiveRootWindow()
@@ -100,17 +262,13 @@ void GeometryWindowClass::ClearRootCanvas()
 void GeometryWindowClass::UpdateRootCanvas()
 {
   //RasterWindow->fCanvas->Modified();
-  RasterWindow->fCanvas->Update();
+  //RasterWindow->fCanvas->Update();
+    RasterWindow->UpdateRootCanvas();
 }
 
 void GeometryWindowClass::SaveAs(const QString filename)
 {
   RasterWindow->SaveAs(filename);
-}
-
-void GeometryWindowClass::OpenGLview()
-{
-  RasterWindow->fCanvas->GetViewer3D("ogl");
 }
 
 void GeometryWindowClass::ResetView()
@@ -130,12 +288,11 @@ void GeometryWindowClass::ResetView()
 
 void GeometryWindowClass::setHideUpdate(bool flag)
 {
-  QWinContainer->setVisible(!flag);
+  RasterWindow->setVisible(!flag);
 }
 
 void GeometryWindowClass::PostDraw()
 {  
-  //TView3D *v = (TView3D*)RasterWindow->fCanvas->GetView();
   TView3D *v = dynamic_cast<TView3D*>(RasterWindow->fCanvas->GetView());
   if (!v) return;
 
@@ -213,68 +370,120 @@ bool GeometryWindowClass::IsWorldVisible()
     return ui->cbShowTop->isChecked();
 }
 
-void GeometryWindowClass::resizeEvent(QResizeEvent *)
-{
-  //tool bar box height fits the window
-  ui->fUIbox->resize(ui->fUIbox->width(), this->height() - 3);
-
-  double width = this->width() - (3 + ui->fUIbox->width() + 3);
-  double height = this->height() - (3 + 3);
-
-//  qDebug()<<ui->fUIbox->x()+ui->fUIbox->width()+3<<width<<height;
-// the second parameter adjusted to show menubar - VS
-  if (QWinContainer) QWinContainer->setGeometry(ui->fUIbox->x() + ui->fUIbox->width() +2,
-                                                this->menuBar()->height()+3, width, height);
-  if (RasterWindow) RasterWindow->ForceResize();
-}
-
 bool GeometryWindowClass::event(QEvent *event)
 {
-  if (MW->WindowNavigator)
-    {
-      if (event->type() == QEvent::Hide) MW->WindowNavigator->HideWindowTriggered("geometry");
-      else if (event->type() == QEvent::Show) MW->WindowNavigator->ShowWindowTriggered("geometry");
-    }
+  if (event->type() == QEvent::WindowActivate)
+      RasterWindow->UpdateRootCanvas();
 
-  return QMainWindow::event(event);
+  return AGuiWindow::event(event);
 }
 
+#include "anetworkmodule.h"
 void GeometryWindowClass::ShowPMnumbers()
 {
-   QVector<QString> tmp(0);
-   for (int i=0; i<MW->PMs->count(); i++) tmp.append( QString::number(i) );
+   QVector<QString> tmp;
+   for (int i=0; i<MW->PMs->count(); i++)
+       tmp.append( QString::number(i) );
+   ShowText(tmp, kBlack, true);
 
-   ShowTextOnPMs(tmp, kBlack);
+   MW->NetModule->onNewGeoManagerCreated();
 }
 
-void GeometryWindowClass::ShowTextOnPMs(QVector<QString> strData, Color_t color)
+void GeometryWindowClass::ShowMonitorIndexes()
 {
-    //protection
-    int numPMs = MW->PMs->count();
-    if (strData.size() != numPMs)
-      {
-        message("Mismatch between the text vector and number of PMs!", this);
-        return;
-      }
+    QVector<QString> tmp;
+    const QVector<const AGeoObject*> & MonitorsRecords = MW->Detector->Sandwich->MonitorsRecords;
+    for (int i=0; i<MonitorsRecords.size(); i++)
+        tmp.append( QString::number(i) );
+    ShowText(tmp, kBlue, false);
+}
 
-    MW->Detector->GeoManager->ClearTracks();
-    if (!isVisible()) show();
+#include "ageoobject.h"
+#include "TGeoNode.h"
+bool findMotherNodeFor(const TGeoNode * node, const TGeoNode * startNode, const TGeoNode* & foundNode)
+{
+    TGeoVolume * startVol = startNode->GetVolume();
+    //qDebug() << "    Starting from"<<startVol->GetName();
+    TObjArray * nList = startVol->GetNodes();
+    if (!nList) return false;
+    int numNodes = nList->GetEntries();
+    //qDebug() << "    Num nodes:"<< numNodes;
+    for (int inod=0; inod<numNodes; inod++)
+    {
+        TGeoNode * n = (TGeoNode*)nList->At(inod);
+        //qDebug() << "    Checking "<< n->GetName();
+        if (n == node)
+        {
+            //qDebug() << "    Match!";
+            foundNode = startNode;
+            return true;
+        }
+        //qDebug() << "    Sending down the line";
+        bool bFound = findMotherNodeFor(node, n, foundNode);
+        //qDebug() << "    Found?"<<bFound;
+        if (bFound) return true;
+    }
+    return false;
+}
+
+void findMotherNode(const TGeoNode * node, const TGeoNode* & motherNode)
+{
+    //qDebug() << "--- search for " << node->GetName();
+    TObjArray* allNodes = gGeoManager->GetListOfNodes();
+    //qDebug() << allNodes->GetEntries();
+    if (allNodes->GetEntries() != 1) return; // should be only World
+    TGeoNode * worldNode = (TGeoNode*)allNodes->At(0);
+    //qDebug() << worldNode->GetName();
+
+    motherNode = worldNode;
+    if (node == worldNode) return; //already there
+
+    bool bOK = findMotherNodeFor(node, worldNode, motherNode);
+//    if (bOK)
+//        qDebug() << "--- found mother node:"<<motherNode->GetName();
+//    else qDebug() << "--- search failed!";
+}
+
+void GeometryWindowClass::ShowText(const QVector<QString> &strData, Color_t color, bool onPMs, bool bFullCycle)
+{
+    const APmHub & PMs = *MW->PMs;
+    const QVector<const AGeoObject*> & Mons = MW->Detector->Sandwich->MonitorsRecords;
+
+    int numObj = ( onPMs ? PMs.count() : Mons.size() );
+    if (strData.size() != numObj)
+    {
+        message("Show text: mismatch in vector size", this);
+        return;
+    }
+    //qDebug() << "Objects:"<<numObj;
+
+    if (bFullCycle) MW->Detector->GeoManager->ClearTracks();
+    if (!isVisible()) showNormal();
 
     //font size
-      //checking minimum PM size
+      //checking minimum size
     double minSize = 1e10;
-    for (int i=0; i<numPMs; i++)
-      {
-        int typ = MW->PMs->at(i).type;
-        APmType tp = *MW->PMs->getType(typ);
-        if (tp.SizeX<minSize) minSize = tp.SizeX;
-        int shape = tp.Shape; //0 box, 1 round, 2 hexa
-        if (shape == 0)
-          if (tp.SizeY<minSize) minSize = tp.SizeY;
-      }
+    for (int i = 0; i < numObj; i++)
+    {
+        if (onPMs)
+        {
+            int typ = MW->PMs->at(i).type;
+            APmType tp = *MW->PMs->getType(typ);
+            if (tp.SizeX<minSize) minSize = tp.SizeX;
+            int shape = tp.Shape; //0 box, 1 round, 2 hexa
+            if (shape == 0)
+              if (tp.SizeY<minSize) minSize = tp.SizeY;
+        }
+        else
+        {
+            double msize = Mons.at(i)->Shape->minSize();
+            if (msize < minSize) minSize = msize;
+        }
+    }
+
       //max number of digits
     int symbols = 0;
-    for (int i=0; i<numPMs; i++)
+    for (int i=0; i<numObj; i++)
         if (strData[i].size() > symbols) symbols = strData[i].size();
     if (symbols == 0) symbols++;
 //        qDebug()<<"Max number of symbols"<<symbols;
@@ -378,13 +587,61 @@ void GeometryWindowClass::ShowTextOnPMs(QVector<QString> strData, Color_t color)
     QVector<QString> SymbolMap(0);
     SymbolMap <<"0"<<"1"<<"2"<<"3"<<"4"<<"5"<<"6"<<"7"<<"8"<<"9"<<"."<<"-";
 
-    for (int ipm=0; ipm<MW->PMs->count(); ipm++)
-      {
-        double Xcenter = MW->PMs->X(ipm);
-        double Ycenter = MW->PMs->Y(ipm);
-        double Zcenter = MW->PMs->Z(ipm);
+    for (int iObj = 0; iObj < numObj; iObj++)
+    {
+        double Xcenter = 0;
+        double Ycenter = 0;
+        double Zcenter = 0;
+        if (onPMs)
+        {
+            Xcenter = PMs.at(iObj).x;
+            Ycenter = PMs.at(iObj).y;
+            Zcenter = PMs.at(iObj).z;
+        }
+        else
+        {
+            const TGeoNode * n = MW->Detector->Sandwich->MonitorNodes.at(iObj);
+            //qDebug() << "\nProcessing monitor"<<n->GetName();
 
-        QString str = strData[ipm];
+            double pos[3], master[3];
+            pos[0] = 0;
+            pos[1] = 0;
+            pos[2] = 0;
+
+            TGeoVolume * motherVol = n->GetMotherVolume();
+            while (motherVol)
+            {
+                //qDebug() << "  Mother vol is:"<< motherVol->GetName();
+                n->LocalToMaster(pos, master);
+                pos[0] = master[0];
+                pos[1] = master[1];
+                pos[2] = master[2];
+                //qDebug() << "  Position:"<<pos[0]<<pos[1]<<pos[2];
+
+                const TGeoNode * motherNode = nullptr;
+                findMotherNode(n, motherNode);
+                if (!motherNode)
+                {
+                    //qDebug() << "  Mother node not found!";
+                    break;
+                }
+                if (motherNode == n)
+                {
+                    //qDebug() << "  strange - world passed";
+                    break;
+                }
+
+                n = motherNode;
+
+                motherVol = n->GetMotherVolume();
+                //qDebug() << "  Continue search: current node:"<<n->GetName();
+            }
+            Xcenter = pos[0];
+            Ycenter = pos[1];
+            Zcenter = pos[2];
+        }
+
+        QString str = strData[iObj];
         if (str.isEmpty()) continue;
         int numDigits = str.size();
         if (str.right(1) == "F") numDigits--;
@@ -419,11 +676,15 @@ void GeometryWindowClass::ShowTextOnPMs(QVector<QString> strData, Color_t color)
                 track->AddPoint(x, y, Zcenter, 0);
               }
           }
-      }
+        //break;
+    }
 
-    MW->GeometryWindow->ShowGeometry(false);
-    MW->Detector->GeoManager->DrawTracks();
-    UpdateRootCanvas();
+    if (bFullCycle)
+    {
+        ShowGeometry(false);
+        MW->Detector->GeoManager->DrawTracks();
+        UpdateRootCanvas();
+    }
 }
 
 void GeometryWindowClass::AddLineToGeometry(QPointF& start, QPointF& end, Color_t color, int width)
@@ -444,180 +705,249 @@ void GeometryWindowClass::AddPolygonfToGeometry(QPolygonF& poly, Color_t color, 
     AddLineToGeometry(poly[i], poly[i+1], color, width);
 }
 
-void GeometryWindowClass::on_pbHideBar_clicked()
+#include "aeventtrackingrecord.h"
+#include "asimulationmanager.h"
+#include "amaterialparticlecolection.h"
+#include "TGeoTrack.h"
+#include "atrackrecords.h"
+void GeometryWindowClass::ShowEvent_Particles(size_t iEvent, bool withSecondaries)
 {
-  BarShown = false;
-  ui->fUIbox->resize(23,500);
-  ui->swToolBar->setCurrentIndex(1);
+    if (iEvent < MW->SimulationManager->TrackingHistory.size())
+    {
+        const AEventTrackingRecord * er = MW->SimulationManager->TrackingHistory.at(iEvent);
+        er->makeTracks(MW->SimulationManager->Tracks, MW->MpCollection->getListOfParticleNames(), MW->SimulationManager->TrackBuildOptions, withSecondaries);
 
-  GeometryWindowClass::resizeEvent(0);
+        for (int iTr=0; iTr<MW->SimulationManager->Tracks.size(); iTr++)
+        {
+            const TrackHolderClass* th = MW->SimulationManager->Tracks.at(iTr);
+            TGeoTrack* track = new TGeoTrack(1, th->UserIndex);
+            track->SetLineColor(th->Color);
+            track->SetLineWidth(th->Width);
+            track->SetLineStyle(th->Style);
+            for (int iNode=0; iNode<th->Nodes.size(); iNode++)
+                track->AddPoint(th->Nodes[iNode].R[0], th->Nodes[iNode].R[1], th->Nodes[iNode].R[2], th->Nodes[iNode].Time);
+            if (track->GetNpoints()>1)
+                MW->Detector->GeoManager->AddTrack(track);
+            else delete track;
+        }
+    }
+
+    DrawTracks();
 }
 
-void GeometryWindowClass::on_pbShowBar_clicked()
+#include "eventsdataclass.h"
+void GeometryWindowClass::ShowPMsignals(int iEvent, bool bFullCycle)
 {
-  BarShown = true;
-  ui->fUIbox->resize(107,500);
-  ui->swToolBar->setCurrentIndex(0);
+    if (iEvent < 0 || iEvent >= MW->EventsDataHub->countEvents()) return;
 
-  GeometryWindowClass::resizeEvent(0);
+    QVector<QString> tmp;
+    for (int i=0; i<MW->PMs->count(); i++)
+        tmp.append( QString::number(MW->EventsDataHub->Events.at(iEvent).at(i)) );
+    ShowText(tmp, kBlack, true, bFullCycle);
 }
 
-void GeometryWindowClass::ShowGeometry(bool ActivateWindow, bool SAME, bool ColorUpdateAllowed)
-// default:  ActivateWindow = true,  SAME = true,  ColorUpdateAllowed = true
+void GeometryWindowClass::ShowGeoMarkers()
 {
-    //qDebug()<<"  ----Showing geometry----"<<GeometryDrawDisabled;
-    if (MW->GeometryDrawDisabled) return;
+    if (!MW->GeoMarkers.isEmpty())
+    {
+        int Mode = ui->cobViewer->currentIndex(); // 0 - standard, 1 - jsroot
+        if (Mode == 0)
+        {
+            SetAsActiveRootWindow();
+            for (int i=0; i<MW->GeoMarkers.size(); i++)
+            {
+                GeoMarkerClass* gm = MW->GeoMarkers[i];
+                //overrides
+                if (gm->Type == "Recon" || gm->Type == "Scan" || gm->Type == "Nodes")
+                {
+                    gm->SetMarkerStyle(GeoMarkerStyle);
+                    gm->SetMarkerSize(GeoMarkerSize);
+                }
+                gm->Draw("same");
+            }
+            UpdateRootCanvas();
+        }
+        else
+        ShowGeometry(false);
+    }
+}
 
-    //setting this window as active pad in root
-    //with or without activation (focussing) of this window
-    if (ActivateWindow) ShowAndFocus(); //window is activated (focused)
-    else SetAsActiveRootWindow(); //no activation in this mode
-
-    MW->Detector->GeoManager->SetNsegments(MW->GlobSet->NumSegments);
-    int level = ui->sbLimitVisibility->value();
-    if (!ui->cbLimitVisibility->isChecked()) level = -1;
-    MW->Detector->GeoManager->SetVisLevel(level);
-
-    //coloring volumes
-    if (ColorUpdateAllowed)
-      {
-        if (MW->ColorByMaterial) MW->Detector->colorVolumes(1);
-        else MW->Detector->colorVolumes(0);
-      }
-    //top volume visibility
-    if (MW->ShowTop) MW->Detector->GeoManager->SetTopVisible(true); // the TOP is generally invisible
-    else MW->Detector->GeoManager->SetTopVisible(false);
-
-    //transparency setup
-    int totNodes = MW->Detector->top->GetNdaughters();
-    for (int i=0; i<totNodes; i++)
-      {
-        TGeoNode* thisNode = (TGeoNode*)MW->Detector->top->GetNodes()->At(i);
-        thisNode->GetVolume()->SetTransparency(0);
-      }
-
-    //making contaners visible
-    MW->Detector->top->SetVisContainers(true);
-
-    //DRAW
-    fNeedZoom = true;
-    setHideUpdate(true);
-    ClearRootCanvas();
-    if (SAME)
-      {
- //       qDebug()<<"keeping";
-        MW->Detector->top->Draw("SAME");
-      }
+void GeometryWindowClass::ShowTracksAndMarkers()
+{
+    int Mode = ui->cobViewer->currentIndex(); // 0 - standard, 1 - jsroot
+    if (Mode == 0)
+    {
+        DrawTracks();
+        ShowGeoMarkers();
+    }
     else
-      {
- //       qDebug()<<"new";
-        //GeometryWindow->ResetView();
-        MW->Detector->top->Draw("");
-      }
-    PostDraw();
+    {
+        ShowGeometry(true, false);
+    }
+}
 
-    //drawing dots
-    MW->ShowGeoMarkers();
-    UpdateRootCanvas();
+void GeometryWindowClass::ClearTracks(bool bRefreshWindow)
+{
+    MW->Detector->GeoManager->ClearTracks();
+    if (bRefreshWindow)
+    {
+        int Mode = ui->cobViewer->currentIndex(); // 0 - standard, 1 - jsroot
+        if (Mode == 0)
+        {
+            SetAsActiveRootWindow();
+            UpdateRootCanvas();
+        }
+        else ShowGeometry(false);
+    }
 }
 
 void GeometryWindowClass::on_pbShowGeometry_clicked()
 {
-  GeometryWindowClass::ShowAndFocus();
-  RasterWindow->ForceResize();
-  fRecallWindow = false;
+    //qDebug() << "Redraw triggered!";
+    ShowAndFocus();
 
-  ShowGeometry(false, false); //not doing "same" option!
-}
+    int Mode = ui->cobViewer->currentIndex(); // 0 - standard, 1 - jsroot
+    if (Mode == 0)
+    {
+        RasterWindow->ForceResize();
+        fRecallWindow = false;
+    }
 
-void GeometryWindowClass::on_cbShowTop_toggled(bool checked)
-{
-  MW->setShowTop(checked);
-  ShowGeometry();
+    ShowGeometry(true, false); //not doing "same" option!
 }
 
 void GeometryWindowClass::on_cbColor_toggled(bool checked)
 {
-  MW->setColorByMaterial(checked);
-  ShowGeometry();
+  ColorByMaterial = checked;
   MW->UpdateMaterialListEdit();
+  on_pbShowGeometry_clicked();
 }
 
 void GeometryWindowClass::on_pbShowPMnumbers_clicked()
 {
-  MW->GeometryWindow->ShowPMnumbers();
+    ShowPMnumbers();
+}
+
+void GeometryWindowClass::on_pbShowMonitorIndexes_clicked()
+{
+    ShowMonitorIndexes();
 }
 
 void GeometryWindowClass::on_pbShowTracks_clicked()
 {
-  MW->ShowTracks();
+    DrawTracks();
+}
+
+void GeometryWindowClass::DrawTracks()
+{
+    if (MW->GeometryDrawDisabled) return;
+
+    int Mode = ui->cobViewer->currentIndex(); // 0 - standard, 1 - jsroot
+    if (Mode == 0)
+    {
+        SetAsActiveRootWindow();
+        MW->Detector->GeoManager->DrawTracks();
+        UpdateRootCanvas();
+    }
+    else ShowGeometry(false);
+}
+
+#include "ageomarkerclass.h"
+void GeometryWindowClass::ShowPoint(double * r, bool keepTracks)
+{
+    MW->clearGeoMarkers();
+
+    GeoMarkerClass* marks = new GeoMarkerClass("Source", 3, 10, kBlack);
+    marks->SetNextPoint(r[0], r[1], r[2]);
+    MW->GeoMarkers.append(marks);
+    GeoMarkerClass* marks1 = new GeoMarkerClass("Source", 4, 3, kRed);
+    marks1->SetNextPoint(r[0], r[1], r[2]);
+    MW->GeoMarkers.append(marks1);
+
+    ShowGeometry(false);
+    if (keepTracks) DrawTracks();
 }
 
 void GeometryWindowClass::on_pbClearTracks_clicked()
 {
   MW->Detector->GeoManager->ClearTracks();
-  ShowGeometry();
+  ShowGeometry(true, false);
 }
 
 void GeometryWindowClass::on_pbClearDots_clicked()
 { 
   MW->clearGeoMarkers();
-  ShowGeometry();
-}
-
-void GeometryWindowClass::on_pbSaveAs_clicked()
-{
-  QFileDialog *fileDialog = new QFileDialog;
-  fileDialog->setDefaultSuffix("png");
-  QString fileName = fileDialog->getSaveFileName(this, "Save image as file", MW->GlobSet->LastOpenDir, "png (*.png);;gif (*.gif);;Jpg (*.jpg)");
-  if (fileName.isEmpty()) return;
-  MW->GlobSet->LastOpenDir = QFileInfo(fileName).absolutePath();
-
-  QFileInfo file(fileName);
-  if(file.suffix().isEmpty()) fileName += ".png";
-
-  GeometryWindowClass::SaveAs(fileName);
-
-  if (MW->GlobSet->fOpenImageExternalEditor) QDesktopServices::openUrl(QUrl("file:"+fileName, QUrl::TolerantMode));
-}
-
-void GeometryWindowClass::on_pbShowGLview_clicked()
-{
-  //transparency setup
-  int tran = ui->sbTransparency->value();
-
-  TObjArray* list = MW->Detector->GeoManager->GetListOfVolumes();
-  int numVolumes = list->GetEntries();
-  for (int i=0; i<numVolumes; i++)
-    {
-      TGeoVolume* tv = (TGeoVolume*)list->At(i);
-      tv->SetTransparency(tran);
-    }
-  GeometryWindowClass::OpenGLview();
+  ShowGeometry(true, false);
 }
 
 void GeometryWindowClass::on_pbTop_clicked()
 {
-  SetAsActiveRootWindow();
-  TView *v = RasterWindow->fCanvas->GetView();
-  v->Top();
+    if (ui->cobViewer->currentIndex() == 0)
+    {
+        SetAsActiveRootWindow();
+        TView *v = RasterWindow->fCanvas->GetView();
+        v->Top();
+        RasterWindow->fCanvas->Modified();
+        RasterWindow->fCanvas->Update();
+        readRasterWindowProperties();
+    }
+    else
+    {
+#ifdef __USE_ANTS_JSROOT__
+        QWebEnginePage * page = WebView->page();
+        QString js = ""
+        "var painter = JSROOT.GetMainPainter(\"onlineGUI_drawing\");"
+        "painter.setCameraPosition(90,0);";
+        page->runJavaScript(js);
 
-  RasterWindow->fCanvas->Modified();
-  RasterWindow->fCanvas->Update();
-  readRasterWindowProperties();
+        /*
+        page->runJavaScript("JSROOT.GetMainPainter(\"onlineGUI_drawing\").produceCameraUrl()", [page](const QVariant &v)
+        {
+            QString reply = v.toString();
+            qDebug() << reply; // let's ask Sergey to make JSON with this data
+            QStringList sl = reply.split(',', QString::SkipEmptyParts); //quick parse just for now
+            if (sl.size() > 2)
+            {
+                QString s;
+                //s += "roty" + ui->leY->text() + ",";
+                s += "roty90,";
+                //s += "rotz" + ui->leZ->text() + ",";
+                s += "rotz0,";
+                //s += "zoom" + ui->leZoom->text() + ",";
+                s += sl.at(2) + ",";
+                s += "dray,nohighlight,all,tracks,transp50";
+                page->runJavaScript("JSROOT.redraw(\"onlineGUI_drawing\", JSROOT.GetMainPainter(\"onlineGUI_drawing\").GetObject(), \"" + s + "\");");
+            }
+        });
+        */
+#endif
+    }
 }
 
 void GeometryWindowClass::on_pbFront_clicked()
 {
-  SetAsActiveRootWindow();
-  TView *v = RasterWindow->fCanvas->GetView();
-  v->Front();
-  RasterWindow->fCanvas->Modified();
-  RasterWindow->fCanvas->Update();
-  readRasterWindowProperties();
+    if (ui->cobViewer->currentIndex() == 0)
+    {
+        SetAsActiveRootWindow();
+        TView *v = RasterWindow->fCanvas->GetView();
+        v->Front();
+        RasterWindow->fCanvas->Modified();
+        RasterWindow->fCanvas->Update();
+        readRasterWindowProperties();
+    }
+    else
+    {
+#ifdef __USE_ANTS_JSROOT__
+        QWebEnginePage * page = WebView->page();
+        QString js = ""
+        "var painter = JSROOT.GetMainPainter(\"onlineGUI_drawing\");"
+        "painter.setCameraPosition(90,90);";
+        page->runJavaScript(js);
+#endif
+    }
 }
 
-void GeometryWindowClass::onRasterWindowChange(Double_t centerX, Double_t centerY, Double_t hWidth, Double_t hHeight, Double_t phi, Double_t theta)
+void GeometryWindowClass::onRasterWindowChange(double centerX, double centerY, double hWidth, double hHeight, double phi, double theta)
 {
   fRecallWindow = true;
   CenterX = centerX;
@@ -636,41 +966,35 @@ void GeometryWindowClass::readRasterWindowProperties()
 
 void GeometryWindowClass::on_pbSide_clicked()
 {
-  SetAsActiveRootWindow();
-  TView *v = RasterWindow->fCanvas->GetView();
-  v->Side();
-  RasterWindow->fCanvas->Modified();
-  RasterWindow->fCanvas->Update();
-  readRasterWindowProperties();
-}
-
-void GeometryWindowClass::on_cobViewType_currentIndexChanged(int index)
-{
-  if (TMPignore) return;
-
-  TView *v = RasterWindow->fCanvas->GetView();
-  if (index == 0)
+    if (ui->cobViewer->currentIndex() == 0)
     {
-      ModePerspective = true;
-      v->SetPerspective();
+        SetAsActiveRootWindow();
+        TView *v = RasterWindow->fCanvas->GetView();
+        v->Side();
+        RasterWindow->fCanvas->Modified();
+        RasterWindow->fCanvas->Update();
+        readRasterWindowProperties();
     }
-  else
+    else
     {
-      ModePerspective = false;
-      v->SetParallel();
+#ifdef __USE_ANTS_JSROOT__
+        QWebEnginePage * page = WebView->page();
+        QString js = ""
+                     "var painter = JSROOT.GetMainPainter(\"onlineGUI_drawing\");"
+                     "painter.setCameraPosition(0.001,0.01);";
+        page->runJavaScript(js);
+#endif
     }
-
-  RasterWindow->fCanvas->Modified();
-  RasterWindow->fCanvas->Update();
-  readRasterWindowProperties();
-
-  RasterWindow->setInvertedXYforDrag( index==1 );
 }
 
 void GeometryWindowClass::on_cbShowAxes_toggled(bool /*checked*/)
 {
-  TView *v = RasterWindow->fCanvas->GetView();
-  v->ShowAxis(); //it actually toggles show<->hide  
+    if (ui->cobViewer->currentIndex() == 0)
+    {
+        TView *v = RasterWindow->fCanvas->GetView();
+        v->ShowAxis(); //it actually toggles show<->hide
+    }
+    else ShowGeometry(true, false);
 }
 
 
@@ -777,55 +1101,317 @@ void GeometryWindowClass::on_actionDefault_zoom_to_0_triggered()
 
 void GeometryWindowClass::on_actionSet_line_width_for_objects_triggered()
 {
-    TObjArray* list = MW->Detector->GeoManager->GetListOfVolumes();
-    int numVolumes = list->GetEntries();
-    qDebug() << numVolumes;
-    for (int i=0; i<numVolumes; i++)
-      {
-        TGeoVolume* tv = (TGeoVolume*)list->At(i);
-        int LWidth = tv->GetLineWidth() + 1;
-        tv->SetLineWidth(LWidth);
-      }
-    SetAsActiveRootWindow();
-    MW->Detector->top->Draw("");
+    doChangeLineWidth(1);
 }
 
 void GeometryWindowClass::on_actionDecrease_line_width_triggered()
 {
+    doChangeLineWidth(-1);
+}
+
+void GeometryWindowClass::doChangeLineWidth(int deltaWidth)
+{
+    // for all WorldTree objects the following will be overriden. Still affects, e.g., PMs
     TObjArray* list = MW->Detector->GeoManager->GetListOfVolumes();
     int numVolumes = list->GetEntries();
     for (int i=0; i<numVolumes; i++)
       {
         TGeoVolume* tv = (TGeoVolume*)list->At(i);
-        int LWidth = tv->GetLineWidth() - 1;
+        int LWidth = tv->GetLineWidth() + deltaWidth;
         if (LWidth <1) LWidth = 1;
+        qDebug() << i << tv->GetName() << LWidth;
         tv->SetLineWidth(LWidth);
       }
-    SetAsActiveRootWindow();
-    MW->Detector->top->Draw("");
+
+    // for all WorldTree objects
+    MW->Detector->changeLineWidthOfVolumes(deltaWidth);
+
+    on_pbShowGeometry_clicked();
 }
 
-#include "anetworkmodule.h"
-void GeometryWindowClass::on_pbWebViewer_clicked()
+//#include <QElapsedTimer>
+void GeometryWindowClass::showWebView()
+{
+#ifdef __USE_ANTS_JSROOT__
+    //WebView->load(QUrl("http://localhost:8080/?nobrowser&item=[Objects/GeoWorld/WorldBox_1,Objects/GeoTracks/TObjArray]&opt=nohighlight;dray;all;tracks;transp50"));
+    //WebView->load(QUrl("http://localhost:8080/?item=[Objects/GeoWorld/WorldBox_1,Objects/GeoTracks/TObjArray]&opt=nohighlight;dray;all;tracks;transp50"));
+    //WebView->load(QUrl("http://localhost:8080/?item=[Objects/GeoWorld/world,Objects/GeoTracks/TObjArray]&opt=nohighlight;dray;all;tracks;transp50"));
+
+    QString s = "http://localhost:8080/?nobrowser&item=Objects/GeoWorld/world&opt=nohighlight;dray;all;tracks";
+    //QString s = "http://localhost:8080/?item=Objects/GeoWorld/world&opt=nohighlight;dray;all;tracks";
+    if (ui->cbShowTop->isChecked())
+        s += ";showtop";
+    if (ui->cobViewType->currentIndex() == 1)
+        s += ";ortho_camera_rotate";
+    if (ui->cbWireFrame->isChecked())
+        s += ";wireframe";
+    s += QString(";transp%1").arg(ui->sbTransparency->value());
+
+    prepareGeoManager(true);
+
+    WebView->load(QUrl(s));
+    WebView->show();
+
+    /*
+    QWebEnginePage * page = WebView->page();
+    QString js = ""
+    "var wait = true;"
+    "if ((typeof JSROOT != \"undefined\") && JSROOT.GetMainPainter)"
+    "{"
+    "   var p = JSROOT.GetMainPainter(\"onlineGUI_drawing\");"
+    "   if (p && p.isDrawingReady()) wait = false;"
+    "}"
+    "wait";
+
+    bool bWait = true;
+    QElapsedTimer timer;
+    timer.start();
+    do
+    {
+        qApp->processEvents();
+
+        page->runJavaScript(js, [&bWait](const QVariant &v)
+        {
+            bWait = v.toBool();
+        });
+        //qDebug() << bWait << timer.elapsed();
+    }
+    while (bWait && timer.elapsed() < 2000);
+
+    qDebug() << "exit!";
+    */
+
+    //ShowGeometry(true, false);
+#endif
+}
+
+#include "globalsettingswindowclass.h"
+void GeometryWindowClass::on_cobViewer_currentIndexChanged(int index)
+{
+#ifdef __USE_ANTS_JSROOT__
+    if (index == 0)
+    {
+        ui->swViewers->setCurrentIndex(0);
+        on_pbShowGeometry_clicked();
+    }
+    else
+    {
+        if (!MW->NetModule->isRootServerRunning())
+        {
+            bool bOK = MW->NetModule->StartRootHttpServer();
+            if (!bOK)
+            {
+                ui->cobViewer->setCurrentIndex(0);
+                message("Failed to start root http server. Check if another server is running at the same port", this);
+                MW->GlobSetWindow->ShowNetSettings();
+                return;
+            }
+        }
+
+        ui->swViewers->setCurrentIndex(1);
+        showWebView();
+    }
+    ui->cbWireFrame->setVisible(index == 1);
+#else
+    ui->cobViewer->setCurrentIndex(0);
+    message("Enable ants2_jsroot in ants2.pro and rebuild", this);
+#endif
+}
+
+void GeometryWindowClass::on_actionOpen_GL_viewer_triggered()
+{
+    int tran = ui->sbTransparency->value();
+    TObjArray * list = MW->Detector->GeoManager->GetListOfVolumes();
+    int numVolumes = list->GetEntries();
+
+    for (int i = 0; i < numVolumes; i++)
+    {
+        TGeoVolume * tv = (TGeoVolume*)list->At(i);
+        tv->SetTransparency(tran);
+    }
+    OpenGLview();
+}
+
+void GeometryWindowClass::OpenGLview()
+{
+    RasterWindow->fCanvas->GetViewer3D("ogl");
+}
+
+void GeometryWindowClass::on_actionJSROOT_in_browser_triggered()
 {
 #ifdef USE_ROOT_HTML
     if (MW->NetModule->isRootServerRunning())
-      {
-        //QString t = "http://localhost:8080/?nobrowser&item=Objects/GeoWorld/World_1&opt=dray;all;tracks";
-        //[Objects/GeoWorld/World_1,Objects/GeoTracks]
-        QString t = "http://localhost:8080/?nobrowser&item=[Objects/GeoWorld/World_1,Objects/GeoTracks/TObjArray]&opt=dray;all;tracks";
+    {
+        //QString t = "http://localhost:8080/?nobrowser&item=[Objects/GeoWorld/WorldBox_1,Objects/GeoTracks/TObjArray]&opt=dray;all;tracks";
+        QString t = "http://localhost:8080/?nobrowser&item=Objects/GeoWorld/world&opt=dray;all;tracks";
         t += ";transp"+QString::number(ui->sbTransparency->value());
         if (ui->cbShowAxes->isChecked()) t += ";axis";
 
         QDesktopServices::openUrl(QUrl(t));
-      }
+    }
     else
-      {
+    {
         message("Root html server has to be started:"
                 "\nUse MainWindow->Menu->Settings->Net->Run_CERN_ROOT_HTML_server", this);
-      }
+    }
 #else
     message("ANTS2 has to be compiled with the activated option in ants2.pro:"
             "\nCONFIG += ants2_RootServer\n", this);
+#endif
+}
+
+/*
+    QWebEnginePage * page = WebView->page();
+    page->runJavaScript(
+
+//    "JSROOT.NewHttpRequest(\"http://localhost:8080/Objects/GeoWorld/WorldBox_1/root.json\", \"object\","
+//    //"JSROOT.NewHttpRequest(\"http://localhost:8080/Objects/GeoTracks/TObjArray/root.json\", \"object\","
+//    "function(res) {"
+//        //"if (res) console.log('Retrieve object', res._typename);"
+//        //    "else console.error('Fail to get object');"
+//        //  "JSROOT.cleanup();"
+
+//          //"JSROOT.redraw(\"onlineGUI_drawing\", res, \"transp50,tracks\");"
+//          //"JSROOT.redraw(\"onlineGUI_drawing\", res, \"transp50,tracks\");"
+//          "JSROOT.draw(\"onlineGUI_drawing\", res, \"transp50,tracks\");"
+//    "}).send();");
+
+
+
+                "var xhr = JSROOT.NewHttpRequest('http://localhost:8080/multi.json?number=2', 'multi', function(res)"
+                                                        "{"
+                                                            "if (!res) return;"
+                                                            "JSROOT.redraw('onlineGUI_drawing', res[0], 'transp50;tracks');"
+                                                        "}"
+                                                ");"
+                "xhr.send('Objects/GeoWorld/WorldBox_1/root.json\\nObjects/GeoTracks/TObjArray/root.json\\n');"
+                //"xhr.send('/Objects/GeoWorld/WorldBox_1/root.json\n');"
+                );
+*/
+
+void GeometryWindowClass::on_cbWireFrame_toggled(bool)
+{
+    ShowGeometry(true, false);
+}
+
+void GeometryWindowClass::on_cbLimitVisibility_clicked()
+{
+    int Mode = ui->cobViewer->currentIndex(); // 0 - standard, 1 - jsroot
+    if (Mode == 0)
+        ShowGeometry(true, false);
+    else
+    {
+#ifdef __USE_ANTS_JSROOT__
+        int level = ui->sbLimitVisibility->value();
+        if (!ui->cbLimitVisibility->isChecked()) level = -1;
+        MW->Detector->GeoManager->SetVisLevel(level);
+        MW->NetModule->onNewGeoManagerCreated();
+
+        prepareGeoManager();
+        showWebView();
+#endif
+    }
+}
+
+void GeometryWindowClass::on_sbLimitVisibility_editingFinished()
+{
+    on_cbLimitVisibility_clicked();
+}
+
+void GeometryWindowClass::on_cbShowTop_toggled(bool)
+{
+    ShowGeometry(true, false);
+/*
+    int Mode = ui->cobViewer->currentIndex(); // 0 - standard, 1 - jsroot
+    if (Mode == 0)
+        ShowGeometry(true, false);
+    else
+    {
+#ifdef __USE_ANTS_JSROOT__
+        ShowGeometry(true, false);
+        QWebEnginePage * page = WebView->page();
+        QString js = "var painter = JSROOT.GetMainPainter(\"onlineGUI_drawing\");";
+        //js += QString("painter.options.showtop = %1;").arg(checked ? "true" : "false");
+        js += QString("painter.setShowTop(%1);").arg(checked ? "true" : "false");
+        js += "painter.startDrawGeometry();";
+        page->runJavaScript(js);
+#endif
+    }
+*/
+}
+
+void GeometryWindowClass::on_cobViewType_currentIndexChanged(int index)
+{
+    if (TMPignore) return;
+
+    int Mode = ui->cobViewer->currentIndex(); // 0 - standard, 1 - jsroot
+    if (Mode == 0)
+    {
+        TView *v = RasterWindow->fCanvas->GetView();
+        if (index == 0)
+        {
+            ModePerspective = true;
+            v->SetPerspective();
+        }
+        else
+        {
+            ModePerspective = false;
+            v->SetParallel();
+        }
+
+        RasterWindow->fCanvas->Modified();
+        RasterWindow->fCanvas->Update();
+        readRasterWindowProperties();
+
+#if ROOT_VERSION_CODE < ROOT_VERSION(6,11,1)
+        RasterWindow->setInvertedXYforDrag( index==1 );
+#endif
+    }
+    else
+    {
+        prepareGeoManager();
+        showWebView();
+       // ShowGeometry(true, false);
+    }
+}
+
+void GeometryWindowClass::on_pbSaveAs_clicked()
+{
+    int Mode = ui->cobViewer->currentIndex(); // 0 - standard, 1 - jsroot
+    if (Mode == 0)
+    {
+        QFileDialog *fileDialog = new QFileDialog;
+        fileDialog->setDefaultSuffix("png");
+        QString fileName = fileDialog->getSaveFileName(this, "Save image as file", MW->GlobSet.LastOpenDir, "png (*.png);;gif (*.gif);;Jpg (*.jpg)");
+        if (fileName.isEmpty()) return;
+        MW->GlobSet.LastOpenDir = QFileInfo(fileName).absolutePath();
+
+        QFileInfo file(fileName);
+        if(file.suffix().isEmpty()) fileName += ".png";
+        GeometryWindowClass::SaveAs(fileName);
+        if (MW->GlobSet.fOpenImageExternalEditor) QDesktopServices::openUrl(QUrl("file:"+fileName, QUrl::TolerantMode));
+    }
+    else
+    {
+#ifdef __USE_ANTS_JSROOT__
+        QWebEnginePage * page = WebView->page();
+        QString js = "var painter = JSROOT.GetMainPainter(\"onlineGUI_drawing\");";
+        js += QString("painter.createSnapshot('dummy.png')");
+        page->runJavaScript(js);
+#endif
+    }
+}
+
+void GeometryWindowClass::onDownloadPngRequested(QWebEngineDownloadItem *item)
+{
+#ifdef __USE_ANTS_JSROOT__
+    QString fileName = QFileDialog::getSaveFileName(this, "Select file name to safe image");
+    if (fileName.isEmpty())
+    {
+        item->cancel();
+        return;
+    }
+    item->setPath(fileName);
+    item->accept();
 #endif
 }

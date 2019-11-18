@@ -10,7 +10,7 @@
 #include "graphwindowclass.h"
 #include "geometrywindowclass.h"
 #include "lrfwindow.h"
-#include "globalsettingsclass.h"
+#include "aglobalsettings.h"
 #include "detectoraddonswindow.h"
 #include "detectorclass.h"
 #include "ajsontools.h"
@@ -19,6 +19,8 @@
 #include "ascriptwindow.h"
 #include "apmgroupsmanager.h"
 #include "guiutils.h"
+#include "alrfwindow.h"
+#include "aremotewindow.h"
 
 //Qt
 #include <QFileDialog>
@@ -95,7 +97,6 @@ void MainWindow::on_actionGain_evaluation_triggered()
   Rwindow->ShowGainWindow();
 }
 
-#include "alrfwindow.h"
 void MainWindow::on_actionReset_position_of_windows_triggered()
 {
    QList<QMainWindow*> list;
@@ -124,10 +125,15 @@ void MainWindow::on_actionReset_position_of_windows_triggered()
 
    if (PythonScriptWindow)
    {
-       GraphWindow->setGeometry(20, 20, 700, 500);
-       GraphWindow->showNormal();
-       GraphWindow->raise();
+       PythonScriptWindow->setGeometry(20, 20, 700, 500);
+       PythonScriptWindow->showNormal();
+       PythonScriptWindow->raise();
    }
+
+   bOptOvDialogPositioned = false;
+
+   OvTesterSettings["PositionX"] = -1;
+   OvTesterSettings["PositionY"] = -1;
 }
 
 void addWindow(QString name, QMainWindow* w, QJsonObject &json)
@@ -152,22 +158,37 @@ void addWindow(QString name, QMainWindow* w, QJsonObject &json)
 
 void MainWindow::on_actionSave_position_and_stratus_of_all_windows_triggered()
 {
-  GraphWindow->switchOffBasket();
-
   QJsonObject json;
-  addWindow("Main", this, json);
-  addWindow("Recon", Rwindow, json);
-  addWindow("Out", Owindow, json);
-  addWindow("LRF", lrfwindow, json);
-  addWindow("newLRF", (QMainWindow*)newLrfWindow, json);
-  addWindow("Navi", WindowNavigator, json);
-  addWindow("Material", MIwindow, json);
-  addWindow("ExLoad", ELwindow, json);
-  addWindow("Geom", GeometryWindow, json);
-  addWindow("Graph", GraphWindow, json);
-  addWindow("DA", DAwindow, json);
-  addWindow("ScriptWindow", ScriptWindow, json);
-  if (PythonScriptWindow) addWindow("PythonScriptWindow", PythonScriptWindow, json);
+
+  static_cast<AGuiWindow*>(this)->           writeToJson("Main", json);
+  static_cast<AGuiWindow*>(Rwindow)->        writeToJson("Recon", json);
+  static_cast<AGuiWindow*>(ELwindow)->       writeToJson("ExLoad", json);
+  static_cast<AGuiWindow*>(Owindow)->        writeToJson("Out", json);
+  static_cast<AGuiWindow*>(DAwindow)->       writeToJson("DA", json);
+  static_cast<AGuiWindow*>(GeometryWindow)-> writeToJson("Geom", json);
+  static_cast<AGuiWindow*>(GraphWindow)->    writeToJson("Graph", json);
+  static_cast<AGuiWindow*>(lrfwindow)->      writeToJson("LRF", json);
+  static_cast<AGuiWindow*>(MIwindow)->       writeToJson("Material", json);
+  static_cast<AGuiWindow*>(ScriptWindow)->   writeToJson("ScriptWindow", json);
+  if (PythonScriptWindow)static_cast<AGuiWindow*>(PythonScriptWindow)->writeToJson("PythonScriptWindow", json);
+  static_cast<AGuiWindow*>(WindowNavigator)->writeToJson("Navi", json);
+  static_cast<AGuiWindow*>(RemoteWindow)->   writeToJson("RemoteWindow", json);
+  static_cast<AGuiWindow*>(newLrfWindow)->   writeToJson("newLRF", json);
+
+  //addWindow("Main", this, json);
+  //addWindow("Recon", Rwindow, json);
+  //addWindow("Out", Owindow, json);
+  //addWindow("LRF", lrfwindow, json);
+  //addWindow("newLRF", (QMainWindow*)newLrfWindow, json);
+  //addWindow("Navi", WindowNavigator, json);
+  //addWindow("Material", MIwindow, json);
+  //addWindow("ExLoad", ELwindow, json);
+  //addWindow("Geom", GeometryWindow, json);
+  //addWindow("Graph", GraphWindow, json);
+  //addWindow("DA", DAwindow, json);
+  //addWindow("ScriptWindow", ScriptWindow, json);
+  //addWindow("RemoteWindow", RemoteWindow, json);
+  //if (PythonScriptWindow) addWindow("PythonScriptWindow", PythonScriptWindow, json);
 
   if (GenScriptWindow)
     {
@@ -183,10 +204,20 @@ void MainWindow::on_actionSave_position_and_stratus_of_all_windows_triggered()
   js["h"] = ScriptWinH;
   json["Script"] = js;
 
+  QJsonObject jsOD;
+  jsOD["x"] = OptOvDialogPosition.x();
+  jsOD["y"] = OptOvDialogPosition.y();
+  jsOD["w"] = OptOvDialogSize.width();
+  jsOD["h"] = OptOvDialogSize.height();
+  json["OptOvDialog"] = jsOD;
+
+  json["OptOvTester"] = OvTesterSettings;
+
   //QString configDir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)+"/ants2";
   //if (!QDir(configDir).exists()) QDir().mkdir(configDir);
-  QString fileName = GlobSet->ConfigDir + "/WindowConfig.ini";
-  SaveJsonToFile(json, fileName);
+  QString fileName = GlobSet.ConfigDir + "/WindowConfig.ini";
+  bool bOK = SaveJsonToFile(json, fileName);
+  if (!bOK) message("Failed to save json to file: "+fileName, this);
 }
 
 void readXYwindow(QString key, QMainWindow* w, bool fWH, QJsonObject &json)
@@ -205,7 +236,7 @@ void readXYwindow(QString key, QMainWindow* w, bool fWH, QJsonObject &json)
   if (js.contains("maximized")) fMaxi = js["maximized"].toBool();
   bool fVis = js["vis"].toBool();
 
-  AssureWidgetIsWithingVisibleArea(w);
+  GuiUtils::AssureWidgetIsWithinVisibleArea(w);
 
   if (fVis || fMaxi) w->showNormal();
   if (fMaxi)
@@ -217,30 +248,46 @@ void readXYwindow(QString key, QMainWindow* w, bool fWH, QJsonObject &json)
 
 void MainWindow::on_actionLoad_positions_and_status_of_all_windows_triggered()
 {
-
-  QString fileName = GlobSet->ConfigDir + "/WindowConfig.ini";
+  QString fileName = GlobSet.ConfigDir + "/WindowConfig.ini";
   if (QFile(fileName).exists())
     {
       QJsonObject json;
       bool ok = LoadJsonFromFile(json, fileName);
       if (!ok)
-        {
+      {
           qDebug() << "Config of window positions/sizes: empty json";
           return;
-        }
-      readXYwindow("Main", this, false, json);
-      readXYwindow("Recon", Rwindow, false, json);
-      readXYwindow("Out", Owindow, true, json);
-      readXYwindow("LRF", lrfwindow, false, json);
-      readXYwindow("newLRF", (QMainWindow*)newLrfWindow, true, json);
-      readXYwindow("Navi", WindowNavigator, false, json);
-      readXYwindow("Material", MIwindow, true, json);
-      readXYwindow("ExLoad", ELwindow, false, json);
-      readXYwindow("Geom", GeometryWindow, true, json);
-      readXYwindow("Graph", GraphWindow, true, json);
-      readXYwindow("DA", DAwindow, true, json);
-      if (json.contains("ScriptWindow")) readXYwindow("ScriptWindow", ScriptWindow, true, json);
-      if (json.contains("PythonScriptWindow") && PythonScriptWindow) readXYwindow("PythonScriptWindow", PythonScriptWindow, true, json);
+      }
+
+      static_cast<AGuiWindow*>(this)->           readFromJson("Main", json);
+      static_cast<AGuiWindow*>(Rwindow)->        readFromJson("Recon", json);
+      static_cast<AGuiWindow*>(ELwindow)->       readFromJson("ExLoad", json);
+      static_cast<AGuiWindow*>(Owindow)->        readFromJson("Out", json);
+      static_cast<AGuiWindow*>(DAwindow)->       readFromJson("DA", json);
+      static_cast<AGuiWindow*>(GeometryWindow)-> readFromJson("Geom", json);
+      static_cast<AGuiWindow*>(GraphWindow)->    readFromJson("Graph", json);
+      static_cast<AGuiWindow*>(lrfwindow)->      readFromJson("LRF", json);
+      static_cast<AGuiWindow*>(MIwindow)->       readFromJson("Material", json);
+      static_cast<AGuiWindow*>(ScriptWindow)->   readFromJson("ScriptWindow", json);
+      if (PythonScriptWindow) static_cast<AGuiWindow*>(PythonScriptWindow)->readFromJson("PythonScriptWindow", json);
+      static_cast<AGuiWindow*>(WindowNavigator)->readFromJson("Navi", json);
+      static_cast<AGuiWindow*>(RemoteWindow)->   readFromJson("RemoteWindow", json);
+      static_cast<AGuiWindow*>(newLrfWindow)->   readFromJson("newLRF", json);
+
+      //readXYwindow("Main", this, false, json);
+      //readXYwindow("Recon", Rwindow, false, json);
+      //readXYwindow("Out", Owindow, true, json);
+      //readXYwindow("LRF", lrfwindow, false, json);
+      //readXYwindow("newLRF", (QMainWindow*)newLrfWindow, true, json);
+      //readXYwindow("Navi", WindowNavigator, false, json);
+      //readXYwindow("Material", MIwindow, true, json);
+      //readXYwindow("ExLoad", ELwindow, false, json);
+      //readXYwindow("Geom", GeometryWindow, true, json);
+      //readXYwindow("Graph", GraphWindow, true, json);
+      //readXYwindow("DA", DAwindow, true, json);
+      //if (json.contains("ScriptWindow")) readXYwindow("ScriptWindow", ScriptWindow, true, json);
+      //if (json.contains("RemoteWindow")) readXYwindow("RemoteWindow", RemoteWindow, true, json);
+      //if (json.contains("PythonScriptWindow") && PythonScriptWindow) readXYwindow("PythonScriptWindow", PythonScriptWindow, true, json);
 
       if (json.contains("Script"))
         {
@@ -251,6 +298,21 @@ void MainWindow::on_actionLoad_positions_and_status_of_all_windows_triggered()
           parseJson(js, "h", ScriptWinH);
           if (GenScriptWindow) recallGeometryOfLocalScriptWindow();
         }
+
+      if (json.contains("OptOvDialog"))
+      {
+          QJsonObject jsOD = json["OptOvDialog"].toObject();
+          int x, y, w, h;
+          parseJson(jsOD, "x", x);
+          parseJson(jsOD, "y", y);
+          OptOvDialogPosition = QPoint(x, y);
+          parseJson(jsOD, "w", w);
+          parseJson(jsOD, "h", h);
+          OptOvDialogSize = QSize(w, h);
+          bOptOvDialogPositioned = true;
+      }
+
+      parseJson(json, "OptOvTester", OvTesterSettings);
     }
 }
 
@@ -312,9 +374,9 @@ void MainWindow::CorrectPreprocessingAdds(QVector<double> Pedestals)
 void MainWindow::on_actionSave_configuration_triggered()
 {
   QFileDialog fileDialog;
-  QString fileName = fileDialog.getSaveFileName(this, "Save configuration", GlobSet->LastOpenDir, "Json files (*.json)");
+  QString fileName = fileDialog.getSaveFileName(this, "Save configuration", GlobSet.LastOpenDir, "Json files (*.json)");
   if (fileName.isEmpty()) return;
-  GlobSet->LastOpenDir = QFileInfo(fileName).absolutePath();
+  GlobSet.LastOpenDir = QFileInfo(fileName).absolutePath();
   QFileInfo file(fileName);
   if(file.suffix().isEmpty()) fileName += ".json";
   ELwindow->SaveConfig(fileName);
@@ -323,9 +385,9 @@ void MainWindow::on_actionSave_configuration_triggered()
 void MainWindow::on_actionLoad_configuration_triggered()
 {
   QFileDialog fileDialog;
-  QString fileName = fileDialog.getOpenFileName(this,"Load configuration", GlobSet->LastOpenDir, "All files (*.*)");
+  QString fileName = fileDialog.getOpenFileName(this,"Load configuration", GlobSet.LastOpenDir, "All files (*.*)");
   if (fileName.isEmpty()) return;
-  GlobSet->LastOpenDir = QFileInfo(fileName).absolutePath();
+  GlobSet.LastOpenDir = QFileInfo(fileName).absolutePath();
   bool bOK = Config->LoadConfig(fileName);
   if (!bOK) message(Config->ErrorString, this);
   if (GeometryWindow->isVisible()) GeometryWindow->ShowGeometry();
@@ -342,7 +404,7 @@ void MainWindow::on_actionNew_detector_triggered()
   int ret = msgBox.exec();
   if (ret == QMessageBox::Cancel) return;
 
-  Config->LoadConfig(GlobSet->ExamplesDir + "/Simplest.json");
+  Config->LoadConfig(GlobSet.ExamplesDir + "/Simplest.json");
   if (ELwindow->isVisible()) ELwindow->hide();
   if (GeometryWindow->isVisible()) GeometryWindow->ShowGeometry(false);
 }
@@ -353,7 +415,10 @@ void MainWindow::setFontSizeAllWindows(int size)
   font.setPointSize(size);
 
   QList<QMainWindow*> wins;
-  wins << (QMainWindow*)this << (QMainWindow*)Rwindow << (QMainWindow*)Owindow << (QMainWindow*)MIwindow << (QMainWindow*)lrfwindow << (QMainWindow*)WindowNavigator << (QMainWindow*)GeometryWindow << (QMainWindow*)GraphWindow << (QMainWindow*)ELwindow << (QMainWindow*)DAwindow << (QMainWindow*)GlobSetWindow << (QMainWindow*)CheckUpWindow;
+  wins << (QMainWindow*)this << (QMainWindow*)Rwindow << (QMainWindow*)Owindow << (QMainWindow*)MIwindow
+       << (QMainWindow*)lrfwindow << (QMainWindow*)WindowNavigator << (QMainWindow*)GeometryWindow
+       << (QMainWindow*)GraphWindow << (QMainWindow*)ELwindow << (QMainWindow*)DAwindow
+       << (QMainWindow*)GlobSetWindow << (QMainWindow*)CheckUpWindow << (QMainWindow*)RemoteWindow;
   if (GainWindow) wins << (QMainWindow*)GainWindow;
   if (PythonScriptWindow) wins << (QMainWindow*)PythonScriptWindow;
 

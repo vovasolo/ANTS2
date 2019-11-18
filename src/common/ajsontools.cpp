@@ -1,10 +1,12 @@
 #include "ajsontools.h"
-#include "amessage.h"
 
+#ifdef GUI
 #include <QCheckBox>
 #include <QSpinBox>
 #include <QLineEdit>
 #include <QComboBox>
+#endif
+
 #include <QJsonDocument>
 #include <QDebug>
 #include <QFile>
@@ -32,6 +34,18 @@ bool parseJson(const QJsonObject &json, const QString &key, int &var)
     }
   else return false;
 }
+
+bool parseJson(const QJsonObject &json, const QString &key, qint64 &var)
+{
+    if (json.contains(key))
+      {
+        double val = json[key].toDouble();
+        var = val;
+        return true;
+      }
+    else return false;
+}
+
 bool parseJson(const QJsonObject &json, const QString &key, double &var)
 {
   if (json.contains(key))
@@ -80,13 +94,14 @@ bool parseJson(const QJsonObject &json, const QString &key, QJsonObject &obj)
     else return false;
 }
 
-void JsonToCheckbox(QJsonObject &json, QString key, QCheckBox *cb)
+#ifdef GUI
+void JsonToCheckbox(const QJsonObject &json, QString key, QCheckBox *cb)
 {
   if (json.contains(key))
     cb->setChecked(json[key].toBool());
 }
 
-void JsonToSpinBox(QJsonObject &json, QString key, QSpinBox *sb)
+void JsonToSpinBox(const QJsonObject &json, QString key, QSpinBox *sb)
 {
   if (json.contains(key))
     {
@@ -96,19 +111,25 @@ void JsonToSpinBox(QJsonObject &json, QString key, QSpinBox *sb)
     }
 }
 
-void JsonToLineEditDouble(QJsonObject &json, QString key, QLineEdit *le)
+void JsonToLineEditDouble(const QJsonObject &json, QString key, QLineEdit *le)
 {
   if (json.contains(key))
     le->setText( QString::number(json[key].toDouble()) );
 }
 
-void JsonToLineEditText(QJsonObject &json, QString key, QLineEdit *le)
+void JsonToLineEditInt(const QJsonObject &json, QString key, QLineEdit *le)
+{
+    if (json.contains(key))
+        le->setText( QString::number(json[key].toInt()) );
+}
+
+void JsonToLineEditText(const QJsonObject &json, QString key, QLineEdit *le)
 {
     if (json.contains(key))
       le->setText( json[key].toString() );
 }
 
-void JsonToComboBox(QJsonObject &json, QString key, QComboBox *qb)
+void JsonToComboBox(const QJsonObject &json, QString key, QComboBox *qb)
 {
   if (json.contains(key))
     {
@@ -117,8 +138,9 @@ void JsonToComboBox(QJsonObject &json, QString key, QComboBox *qb)
       qb->setCurrentIndex(index);
     }
 }
+#endif
 
-bool LoadJsonFromFile(QJsonObject &json, QString fileName)
+bool LoadJsonFromFile(QJsonObject &json, const QString &fileName)
 {
     QFile loadFile(fileName);
     if (loadFile.open(QIODevice::ReadOnly))
@@ -127,17 +149,17 @@ bool LoadJsonFromFile(QJsonObject &json, QString fileName)
         QJsonDocument loadDoc(QJsonDocument::fromJson(saveData));
         json = loadDoc.object();
         loadFile.close();
-        //qDebug()<<"  Loaded Json from file:"<<fileName;
+        //  qDebug()<<"  Loaded Json from file:"<<fileName;
+        return true;
       }
     else
       {
-        message("Cannot open file: "+fileName);
+        //  qDebug() << "Cannot open file:" << fileName;
         return false;
       }
-    return true;
 }
 
-bool SaveJsonToFile(QJsonObject &json, QString fileName)
+bool SaveJsonToFile(const QJsonObject &json, const QString &fileName)
 {
   QJsonDocument saveDoc(json);
 
@@ -147,14 +169,13 @@ bool SaveJsonToFile(QJsonObject &json, QString fileName)
       saveFile.write(saveDoc.toJson());
       saveFile.close();
       //  qDebug()<<"  Saved Json to file:"<<fileName;
+      return true;
     }
   else
     {
-      message("Couldn't save json to file: "+fileName);
+      //  qDebug() << "Couldn't save json to file: "<<fileName;
       return false;
     }
-
-  return true;
 }
 
 bool writeTH1ItoJsonArr(TH1I* hist, QJsonArray &ja)
@@ -207,15 +228,24 @@ bool writeTwoQVectorsToJArray(const QVector<double> &x, const QVector<double> &y
   return true;
 }
 
-void readTwoQVectorsFromJArray(QJsonArray &ar, QVector<double> &x, QVector<double> &y)
+bool readTwoQVectorsFromJArray(QJsonArray &ar, QVector<double> &x, QVector<double> &y)
 {
-  for (int i=0; i<ar.size(); i++)
+    x.clear();
+    y.clear();
+
+    for (int i=0; i<ar.size(); i++)
     {
-      double X = ar[i].toArray()[0].toDouble();
-      x.append(X);
-      double Y = ar[i].toArray()[1].toDouble();
-      y.append(Y);
+        if ( !ar.at(i).isArray() ) return false;
+
+        QJsonArray jar = ar.at(i).toArray();
+        if (jar.size() < 2) return false;
+
+        double X = jar.at(0).toDouble();
+        x.append(X);
+        double Y = jar.at(1).toDouble();
+        y.append(Y);
     }
+    return true;
 }
 
 bool write2DQVectorToJArray(const QVector<QVector<double> > &xy, QJsonArray &ar)
@@ -245,4 +275,32 @@ bool isContainAllKeys(QJsonObject json, QStringList keys)
     for (QString key : keys)
         if (!json.contains(key)) return false;
     return true;
+}
+
+const QJsonObject strToObject(const QString &s)
+{
+    QJsonDocument doc = QJsonDocument::fromJson(s.toUtf8());
+    return doc.object();
+}
+
+const QString jsonToString(const QJsonObject &json)
+{
+    QJsonDocument doc(json);
+    QString s( doc.toJson(QJsonDocument::Compact) );
+    return s;
+}
+
+bool LoadJsonArrayFromFile(QJsonArray &ar, const QString &fileName)
+{
+    QFile loadFile(fileName);
+    if (loadFile.open(QIODevice::ReadOnly))
+    {
+        QByteArray saveData = loadFile.readAll();
+        QJsonDocument loadDoc(QJsonDocument::fromJson(saveData));
+        ar = loadDoc.array();
+        loadFile.close();
+        return true;
+    }
+    else
+        return false;
 }

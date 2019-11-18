@@ -6,7 +6,7 @@
 #include <QJsonArray>
 
 class DetectorClass;
-class ParticleSourcesClass;
+class ASourceParticleGenerator;
 
 class AConfiguration : public QObject
 {
@@ -19,7 +19,7 @@ public:
   QString ErrorString;      // Last detected error (load config)
 
   void SetDetector(DetectorClass* detector) {Detector = detector;}
-  void SetParticleSources(ParticleSourcesClass* particleSources) {ParticleSources = particleSources;}
+  void SetParticleSources(ASourceParticleGenerator* particleSources) {ParticleSources = particleSources;}
   DetectorClass* GetDetector() {return Detector;}
 
   // save/load to json
@@ -29,12 +29,6 @@ public:
   // save/load to file
   bool LoadConfig(QString fileName, bool DetConstructor = true, bool SimSettings = true, bool ReconstrSettings = true, QJsonObject *jsout = 0);
   bool SaveConfig(QString fileName, bool DetConstructor = true, bool SimSettings = true, bool ReconstrSettings = true);
-
-  //Simulation module specific
-  void ClearCustomNodes();
-  QJsonArray GetCustomNodes();
-  void AddCustomNode(double x, double y, double z);
-  bool SetCustomNodes(QJsonArray arr);
 
   //remove particle
   const QString RemoveParticle(int particleId);  //returns "" on sucess, otherwise gives error string
@@ -55,7 +49,7 @@ public slots:
   void UpdateLRFv3makeJson();
   void UpdateReconstructionSettings(QJsonObject& jsonRec, int iGroup);
   void UpdateFilterSettings(QJsonObject& jsonFilt, int iGroup);
-  void UpdateParticlesJson();
+  void UpdateParticlesJson();  //does not trigger gui update anymore!
   void UpdateSourcesJson(QJsonObject& sourcesJson);  
 
 signals:
@@ -72,13 +66,12 @@ signals:
   void IsParticleInUseBySources(int particleId, bool& bInUse, QString& s);
   void IsParticleInUseByMonitors(int particleId, bool& bInUse, QString& s);
   void RequestRemoveParticle(int particleId);
-  void RequestClearParticleStack();
 
 public slots:
 
 private:
   DetectorClass* Detector;                  // Link to the Detector object
-  ParticleSourcesClass* ParticleSources;    // Link to the ParticleSources object of SimulationManager
+  ASourceParticleGenerator* ParticleSources;    // Link to the ParticleSources object of SimulationManager
 
 };
 

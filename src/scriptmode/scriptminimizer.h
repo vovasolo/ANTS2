@@ -12,6 +12,7 @@
 class MainWindow;
 class AScriptManager;
 class AJavaScriptManager;
+class AFunctorBase;
 
 namespace ROOT { namespace Minuit2 { class Minuit2Minimizer; } }
 namespace ROOT { namespace Math { class Functor; } }
@@ -106,7 +107,7 @@ public slots:
   const QVariant GetResults() const {return Results;}
 
 protected:
-  AScriptManager* ScriptManager = 0;
+  AScriptManager* ScriptManager = nullptr;
   QVector<AVarRecordBase*> Variables;
   QVariantList    Results;
 
@@ -114,35 +115,41 @@ protected:
   int             PrintVerbosity = -1;
   int             Method = 0; // 0-Migrad, 1-Simplex
 
-  virtual ROOT::Math::Functor* configureFunctor() = 0;
+  virtual ROOT::Math::Functor * configureFunctor() = 0;
 };
 
-class AInterfaceToMinimizerJavaScript : public AInterfaceToMinimizerScript
+class AMini_JavaScript_SI : public AInterfaceToMinimizerScript
 {
-  Q_OBJECT
+    Q_OBJECT
 
 public:
-  AInterfaceToMinimizerJavaScript(AJavaScriptManager* ScriptManager);
-  AInterfaceToMinimizerJavaScript(const AInterfaceToMinimizerJavaScript& other);
+    AMini_JavaScript_SI(AJavaScriptManager * ScriptManager);
+    AMini_JavaScript_SI(const AMini_JavaScript_SI & other);
+    ~AMini_JavaScript_SI();
 
-  void SetScriptManager(AJavaScriptManager* NewScriptManager);
+    void SetScriptManager(AJavaScriptManager * NewScriptManager);
 
-  virtual ROOT::Math::Functor*  configureFunctor() override;
+    ROOT::Math::Functor * configureFunctor() override;
 
+private:
+    AFunctorBase * baseFunctor = nullptr;
 };
 
 #ifdef __USE_ANTS_PYTHON__
 class APythonScriptManager;
 
-class AInterfaceToMinimizerPythonScript : public AInterfaceToMinimizerScript
+class AMini_Python_SI : public AInterfaceToMinimizerScript
 {
-  Q_OBJECT
+    Q_OBJECT
 
 public:
-  AInterfaceToMinimizerPythonScript(APythonScriptManager *ScriptManager);
+    AMini_Python_SI(APythonScriptManager * ScriptManager);
+    ~AMini_Python_SI();
 
-  virtual ROOT::Math::Functor*  configureFunctor() override;
+    ROOT::Math::Functor * configureFunctor() override;
 
+private:
+    AFunctorBase * baseFunctor = nullptr;
 };
 #endif
 

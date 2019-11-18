@@ -1,6 +1,6 @@
 #include "localscriptinterfaces.h"
 
-#include <QVector3D>
+#include <QtGui/QVector3D>
 #include <QDebug>
 
 InterfaceToPMscript::InterfaceToPMscript()
@@ -24,21 +24,4 @@ void InterfaceToPMscript::PM(double x, double y, double z, QString type, double 
   QJsonArray el;
   el<<x<<y<<z<<type<<phi<<theta<<psi;
   arr.append(el);
-}
-
-InterfaceToNodesScript::InterfaceToNodesScript(QVector<QVector3D*> & nodes) : nodes(nodes)
-{
-    H["node"] = "Adds a node with (x,y,z) coordinates";
-    H["clear"] = "clear all nodes";
-}
-
-void InterfaceToNodesScript::clear()
-{
-    for (int i=0; i<nodes.size(); i++) delete nodes.at(i);
-    nodes.clear();
-}
-
-void InterfaceToNodesScript::node(double x, double y, double z)
-{
-    nodes.append( new QVector3D(x,y,z) );
 }

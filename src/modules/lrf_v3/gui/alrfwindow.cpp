@@ -11,6 +11,7 @@
 #include <QFileDialog>
 #include <QScrollBar>
 #include <QJsonDocument>
+#include <QButtonGroup>
 
 #include "amessage.h"
 #include "alrfmouseexplorer.h"
@@ -20,7 +21,7 @@
 #include "geometrywindowclass.h"
 #include "apmgroupsmanager.h"
 #include "ajsontools.h"
-#include "globalsettingsclass.h"
+#include "aglobalsettings.h"
 #include "graphwindowclass.h"
 #include "windownavigatorclass.h"
 #include "aconfiguration.h"
@@ -42,9 +43,15 @@ namespace Widgets = LRF::LrfWindowWidgets;
 using namespace LRF;
 
 ALrfWindow::ALrfWindow(QWidget *parent, MainWindow *mw, ARepository *lrf_repo) :
-  QMainWindow(parent), mw(mw), repo(lrf_repo)
+  AGuiWindow(parent), mw(mw), repo(lrf_repo)
 {
   setupUi(this);
+
+  Qt::WindowFlags windowFlags = (Qt::Window | Qt::CustomizeWindowHint);
+  windowFlags |= Qt::WindowCloseButtonHint;
+  windowFlags |= Qt::Tool;
+  this->setWindowFlags( windowFlags );
+
   connect(repo, &ARepository::currentLrfsChangedReadyStatus, this, &ALrfWindow::onReadyStatusChanged);
   lw_instructions->setDragEnabled(false);
 
@@ -157,7 +164,7 @@ void ALrfWindow::onRequestShowPMs(QString selection)
        Text[ipm] = QString::number(ipm);
    }
 
-   mw->GeometryWindow->ShowTextOnPMs(Text, kBlack);
+   mw->GeometryWindow->ShowText(Text, kBlack);
 }
 
 void ALrfWindow::onReadyStatusChanged(bool fReady)
@@ -187,16 +194,6 @@ void ALrfWindow::on_pbUpdateInstructionsJson_clicked()
     writeInstructionsToJson(js);
     repo->setNextUpdateConfig(js);
     mw->Config->UpdateLRFv3makeJson();
-}
-
-bool ALrfWindow::event(QEvent *event)
-{
-    if (!mw->WindowNavigator) return QMainWindow::event(event);
-
-    if (event->type() == QEvent::Hide) mw->WindowNavigator->HideWindowTriggered("newLrf");
-    if (event->type() == QEvent::Show) mw->WindowNavigator->ShowWindowTriggered("newLrf");
-
-    return QMainWindow::event(event);
 }
 
 void ALrfWindow::setSplitterRightColumn(QWidget *new_widget)
@@ -230,7 +227,7 @@ void ALrfWindow::addWidgetToInstructionList(QListWidget *list, Widgets::AInstruc
   widget->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Minimum);
   connect(widget, &Widgets::AInstructionListWidgetItem::requestShowPMs, this, &ALrfWindow::onRequestShowPMs);
   connect(widget, &Widgets::AInstructionListWidgetItem::requestShowTextOnSensors, [=](QVector<QString> text) {
-    mw->GeometryWindow->ShowTextOnPMs(text, kBlack);
+    mw->GeometryWindow->ShowText(text, kBlack);
   });
 
   connect(widget, &LrfWindowWidgets::AInstructionListWidgetItem::elementChanged, this, &ALrfWindow::on_pbUpdateInstructionsJson_clicked);
@@ -534,9 +531,9 @@ void ALrfWindow::onRecipeContextMenuActionCopyToEditor()
 
 void ALrfWindow::onRecipeContextMenuActionSave()
 {
-  QString file_name = QFileDialog::getSaveFileName(this, "Save recipe", mw->GlobSet->LastOpenDir, "json files(*.json);;all files(*)");
+  QString file_name = QFileDialog::getSaveFileName(this, "Save recipe", mw->GlobSet.LastOpenDir, "json files(*.json);;all files(*)");
   if (file_name.isEmpty()) return;
-  mw->GlobSet->LastOpenDir = QFileInfo(file_name).dir().absolutePath();
+  mw->GlobSet.LastOpenDir = QFileInfo(file_name).dir().absolutePath();
 
   QJsonDocument doc(repo->toJson(tw_recipes->getSelectedRecipeId()));
   QFile save_file(file_name);
@@ -587,9 +584,9 @@ void ALrfWindow::onVersionContextMenuActionSetAsSecondary()
 
 void ALrfWindow::onVersionContextMenuActionSave()
 {
-  QString file_name = QFileDialog::getSaveFileName(this, "Save version", mw->GlobSet->LastOpenDir, "json files(*.json);;all files(*)");
+  QString file_name = QFileDialog::getSaveFileName(this, "Save version", mw->GlobSet.LastOpenDir, "json files(*.json);;all files(*)");
   if (file_name.isEmpty()) return;
-  mw->GlobSet->LastOpenDir = QFileInfo(file_name).dir().absolutePath();
+  mw->GlobSet.LastOpenDir = QFileInfo(file_name).dir().absolutePath();
 
   QJsonDocument doc(repo->toJson(tw_recipes->getSelectedRecipeId(), tw_recipes->getSelectedVersionId()));
   QFile save_file(file_name);
@@ -722,9 +719,9 @@ void ALrfWindow::on_pbSTOP_clicked()
 
 void ALrfWindow::on_pb_save_repository_clicked()
 {
-  QString file_name = QFileDialog::getSaveFileName(this, "Save repository", mw->GlobSet->LastOpenDir, "json files(*.json);;all files(*)");
+  QString file_name = QFileDialog::getSaveFileName(this, "Save repository", mw->GlobSet.LastOpenDir, "json files(*.json);;all files(*)");
   if (file_name.isEmpty()) return;
-  mw->GlobSet->LastOpenDir = QFileInfo(file_name).dir().absolutePath();
+  mw->GlobSet.LastOpenDir = QFileInfo(file_name).dir().absolutePath();
 
   QJsonDocument doc(repo->toJson());
   QFile save_file(file_name);
@@ -738,9 +735,9 @@ void ALrfWindow::on_pb_save_repository_clicked()
 
 void ALrfWindow::on_pb_load_repository_clicked()
 {
-  QStringList file_names = QFileDialog::getOpenFileNames(this, "Append repository", mw->GlobSet->LastOpenDir, "json files (*.json);;all files(*)");
+  QStringList file_names = QFileDialog::getOpenFileNames(this, "Append repository", mw->GlobSet.LastOpenDir, "json files (*.json);;all files(*)");
   if(file_names.isEmpty()) return;
-  mw->GlobSet->LastOpenDir = QFileInfo(file_names.first()).absolutePath();
+  mw->GlobSet.LastOpenDir = QFileInfo(file_names.first()).absolutePath();
 
   for (int ifile = 0; ifile < file_names.size(); ifile++) {
     QString file_name = file_names[ifile];
@@ -762,9 +759,9 @@ void ALrfWindow::on_pb_load_repository_clicked()
 
 void ALrfWindow::on_pb_save_current_clicked()
 {
-  QString file_name = QFileDialog::getSaveFileName(this, "Save current lrfs", mw->GlobSet->LastOpenDir, "json files(*.json);;all files(*)");
+  QString file_name = QFileDialog::getSaveFileName(this, "Save current lrfs", mw->GlobSet.LastOpenDir, "json files(*.json);;all files(*)");
   if (file_name.isEmpty()) return;
-  mw->GlobSet->LastOpenDir = QFileInfo(file_name).dir().absolutePath();
+  mw->GlobSet.LastOpenDir = QFileInfo(file_name).dir().absolutePath();
 
   QJsonDocument doc(repo->toJson(repo->getCurrentRecipeID()));
   QFile save_file(file_name);
@@ -778,9 +775,9 @@ void ALrfWindow::on_pb_save_current_clicked()
 
 void ALrfWindow::on_pb_load_current_clicked()
 {
-  QStringList file_names = QFileDialog::getOpenFileNames(this, "Append repository and set as current", mw->GlobSet->LastOpenDir, "json files (*.json);;all files(*)");
+  QStringList file_names = QFileDialog::getOpenFileNames(this, "Append repository and set as current", mw->GlobSet.LastOpenDir, "json files (*.json);;all files(*)");
   if(file_names.isEmpty()) return;
-  mw->GlobSet->LastOpenDir = QFileInfo(file_names.first()).absolutePath();
+  mw->GlobSet.LastOpenDir = QFileInfo(file_names.first()).absolutePath();
 
   for (int ifile = 0; ifile < file_names.size(); ifile++) {
     QString file_name = file_names[ifile];
@@ -826,7 +823,7 @@ void ALrfWindow::on_pb_show_radial_clicked()
   json["Z"] = led_zcenter->text().toDouble();
   json["DZ"] = led_zrange->text().toDouble();
   json["EnergyScaling"] = cb_UseEventEnergy->isChecked();
-  json["FunctionPointsX"] = mw->GlobSet->FunctionPointsX;
+  json["FunctionPointsX"] = mw->GlobSet.FunctionPointsX;
   json["Bins"] = sbDataBins->value();
   json["ShowNodes"] = false;//ui->cbShowNodePositions->isChecked();
 
@@ -880,8 +877,8 @@ void ALrfWindow::on_pb_show_xy_clicked()
   json["Z"] = led_zcenter->text().toDouble();
   json["DZ"] = led_zrange->text().toDouble();
   json["EnergyScaling"] = cb_UseEventEnergy->isChecked();
-  json["FunctionPointsX"] = mw->GlobSet->FunctionPointsX;
-  json["FunctionPointsY"] = mw->GlobSet->FunctionPointsY;
+  json["FunctionPointsX"] = mw->GlobSet.FunctionPointsX;
+  json["FunctionPointsY"] = mw->GlobSet.FunctionPointsY;
   json["Bins"] = sbDataBins->value();
   //json["ShowNodes"] = ui->cbShowNodePositions->isChecked();
 
@@ -1056,15 +1053,16 @@ bool ALrfWindow::doLrfRadialProfile(QVector<double> &radius, QVector<double> &LR
   return true;
 }
 
+#include "TGraph.h"
 void ALrfWindow::on_pbShowRadialForXY_clicked()
 {
   QVector<double> Rad, LRF;
   if(!doLrfRadialProfile(Rad, LRF)) return;
 
-  mw->GraphWindow->ShowAndFocus();
-  TString str = "LRF of pm#";
-  str += sbPM->value();
-  mw->GraphWindow->MakeGraph(&Rad, &LRF, 4, "Radial distance, mm", "LRF", 6, 1, 0, 0, "");
+  QString str = QString("LRF of pm #%1").arg(sbPM->value());
+  //mw->GraphWindow->MakeGraph(&Rad, &LRF, 4, "Radial distance, mm", "LRF", 6, 1, 0, 0, "");
+  TGraph * g = mw->GraphWindow->ConstructTGraph(Rad, LRF, str, "Radial distance, mm", "LRF", 4, 6, 1, 0, 0, 0);
+  mw->GraphWindow->Draw(g, "AP");
 }
 
 void ALrfWindow::on_pbExportLrfVsRadial_clicked()
@@ -1073,10 +1071,10 @@ void ALrfWindow::on_pbExportLrfVsRadial_clicked()
   if(!doLrfRadialProfile(Rad, LRF)) return;
 
   QString str = sbPM->text();
-  QString fileName = QFileDialog::getSaveFileName(this, "Save LRF # " +str+ " vs radius", mw->GlobSet->LastOpenDir,
+  QString fileName = QFileDialog::getSaveFileName(this, "Save LRF # " +str+ " vs radius", mw->GlobSet.LastOpenDir,
                                                   "Text files (*.txt);;Data files (*.dat);;All files (*.*)");
   if (fileName.isEmpty()) return;
-  mw->GlobSet->LastOpenDir = QFileInfo(fileName).absolutePath();
+  mw->GlobSet.LastOpenDir = QFileInfo(fileName).absolutePath();
   QFile outputFile(fileName);
   outputFile.open(QIODevice::WriteOnly);
   if(!outputFile.isOpen()) {

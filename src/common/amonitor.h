@@ -4,10 +4,13 @@
 #include "amonitorconfig.h"
 
 #include <QString>
+#include <vector>
 
 class TH1D;
+class ATH1D;
 class TH2D;
 class AGeoObject;
+class QJsonObject;
 
 class AMonitor
 {
@@ -20,32 +23,21 @@ public:
   void fillForParticle(double x, double y, double Time, double Angle, double Energy);
   void fillForPhoton(double x, double y, double Time, double Angle, int waveIndex);
 
-  inline bool isForPhotons() const     {return config.PhotonOrParticle == 0;}
-  inline bool isForParticles() const   {return config.PhotonOrParticle != 0;}
-  inline bool isUpperSensitive() const {return config.bUpper;}
-  inline bool isLowerSensitive() const {return config.bLower;}
-  inline bool isStopsTracking() const  {return config.bStopTracking;}
-  inline int  getParticleIndex() const {return config.ParticleIndex;}
-  inline bool isPrimary() const        {return config.bPrimary;}
-  inline bool isSecondary() const      {return config.bSecondary;}
+  inline bool isForPhotons() const         {return config.PhotonOrParticle == 0;}
+  inline bool isForParticles() const       {return config.PhotonOrParticle != 0;}
+  inline bool isUpperSensitive() const     {return config.bUpper;}
+  inline bool isLowerSensitive() const     {return config.bLower;}
+  inline bool isStopsTracking() const      {return config.bStopTracking;}
+  inline int  getParticleIndex() const     {return config.ParticleIndex;}
+  inline bool isAcceptingPrimary() const   {return config.bPrimary;}
+  inline bool isAcceptingSecondary() const {return config.bSecondary;}
+  inline bool isAcceptingDirect() const    {return config.bDirect;}
+  inline bool isAcceptingIndirect() const  {return config.bIndirect;}
 
 //configuration
   bool readFromGeoObject(const AGeoObject* MonitorRecord);
 
-  void setForPhoton()                  {config.PhotonOrParticle = 0;}
-  void setForparticles()               {config.PhotonOrParticle = 1;}
-  void setUpperIsSensitive(bool flag)  {config.bUpper = flag;}
-  void setLowerIsSensitive(bool flag)  {config.bLower = flag;}
-  void setStopsTracking(bool flag)     {config.bStopTracking = flag;}
-  void setParticle(int particleIndex)  {config.ParticleIndex = particleIndex;}
-  void setPrimaryEnabled(bool flag)    {config.bPrimary = flag;}
-  void setSecondaryEnabled(bool flag)  {config.bSecondary = flag;}
-
-  void configureTime(int timeBins, double timeFrom, double timeTo);
-  void configureXY(int xBins, int yBins);
-  void configureWave(int waveBins, int waveFrom, int waveTo);
-  void configureAngle(int angleBins, int angleFrom, int angleTo);
-  void configureEnergy(int energyBins, int energyFrom, int energyTo);
+  void overrideDataFromJson(const QJsonObject & json);
 
 // stat data handling
   void clearData();
@@ -60,6 +52,8 @@ public:
   const QString getName() const {return name;}
 
   void appendDataFromAnotherMonitor(AMonitor* from); // used to merge data from several threads
+
+  const AMonitorConfig & getConfig() const {return config;}
 
 private:
   QString name;
@@ -78,6 +72,7 @@ private:
   void initAngleHist();
   void initEnergyHist();
 
+  void update1D(const QJsonObject &json, TH1D *& old);
 };
 
 #endif // AMONITOR_H

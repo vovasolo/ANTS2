@@ -1,0 +1,64 @@
+{
+"DecayScenarios": [
+	{
+		"Branching": 0.9390000000000001,
+		"GeneratedParticles": [
+			{
+				"Energy": 1470,
+				"OpositeDirectionWithPrevious": false,
+				"Particle": {
+					"A": -1,
+                    "Name": "alpha",
+                    "Type": 1,
+                    "Z": -1
+				}
+			},
+			{
+				"Energy": 840,
+				"OpositeDirectionWithPrevious": true,
+				"Particle": {
+                    "A": 7,
+                    "Name": "Li7",
+                    "Type": 1,
+                    "Z": 3
+				}
+			},
+			{
+				"Energy": 478,
+				"OpositeDirectionWithPrevious": false,
+				"Particle": {
+                    "A": -1,
+                    "Name": "gamma",
+                    "Type": 0,
+                    "Z": -1
+				}
+			}
+		]
+	},
+	{
+		"Branching": 0.061,
+		"GeneratedParticles": [
+			{
+				"Energy": 1780,
+				"OpositeDirectionWithPrevious": false,
+				"Particle": {
+					"A": -1,
+                    "Name": "alpha",
+                    "Type": 1,
+                    "Z": -1
+				}
+			},
+			{
+				"Energy": 1010,
+				"OpositeDirectionWithPrevious": true,
+				"Particle": {
+                    "A": 7,
+                    "Name": "Li7",
+                    "Type": 1,
+                    "Z": 3
+				}
+			}
+		]
+	}
+]
+}

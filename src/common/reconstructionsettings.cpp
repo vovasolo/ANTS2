@@ -16,12 +16,6 @@ bool ReconstructionSettings::readFromJson(QJsonObject &RecJson)
   Zstrategy = gjson["Zstrategy"].toInt();
   fIncludePassive = gjson["IncludePassives"].toBool();
   fWeightedChi2calculation = gjson["WeightedChi2"].toBool();
-  fLimitSearchIfTrueIsSet = false; //compatibility
-  parseJson(gjson, "LimitSearchIfTrueIsSet", fLimitSearchIfTrueIsSet);
-  RangeForLimitSearchIfTrueSet = 1.0; //compatibility
-  parseJson(gjson, "RangeForLimitSearchIfTrueSet", RangeForLimitSearchIfTrueSet);
-  LimitSearchGauss = false;
-  parseJson(gjson, "LimitSearchGauss", LimitSearchGauss);
 
   //Dynamic passives - before algorithms for compatibility: CUDA settings can overrite them if old file is loaded
   if (RecJson.contains("DynamicPassives"))
@@ -79,7 +73,7 @@ bool ReconstructionSettings::readFromJson(QJsonObject &RecJson)
   CoGIgnoreThresholdHigh = 1.0e10; //compatibility
   if (cogjson.contains("IgnoreThresholdHigh")) CoGIgnoreThresholdHigh = cogjson["IgnoreThresholdHigh"].toDouble();
   fCoGIgnoreFar = false; //compatibility
-  fCoGIgnoreFar = cogjson["IgnoreFar"].toBool();
+  if (cogjson.contains("IgnoreFar")) fCoGIgnoreFar = cogjson["IgnoreFar"].toBool();
   if (fCoGIgnoreFar)
     {
       CoGIgnoreDistance = cogjson["IgnoreDistance"].toDouble();
@@ -122,7 +116,9 @@ bool ReconstructionSettings::readFromJson(QJsonObject &RecJson)
   QJsonObject rootJson = ajson["RootMinimizerOptions"].toObject();
   RMstartOption = rootJson["StartOption"].toInt();
   RMminuitOption = rootJson["Minuit2Option"].toInt();
-  fRMuseML = rootJson["LSorLikelihood"].toInt();
+  RMtype  = rootJson["LSorLikelihood"].toInt();
+  RMformula.clear();
+  parseJson(rootJson, "Formula", RMformula);
   RMstepX = rootJson["StartStepX"].toDouble();
   RMstepY = rootJson["StartStepY"].toDouble();
   RMstepZ = rootJson["StartStepZ"].toDouble();

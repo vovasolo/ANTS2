@@ -9,7 +9,7 @@
 #include "geometrywindowclass.h"
 #include "outputwindow.h"
 #include "eventsdataclass.h"
-#include "globalsettingsclass.h"
+#include "aglobalsettings.h"
 #include "ajsontools.h"
 #include "apositionenergyrecords.h"
 #include "windownavigatorclass.h"
@@ -40,7 +40,7 @@
 #include "TGraph2D.h"
 
 LRFwindow::LRFwindow(QWidget *parent, MainWindow *mw, EventsDataClass *eventsDataHub) :
-  QMainWindow(parent),
+  AGuiWindow(parent),
   ui(new Ui::LRFwindow)
 {
   MW = mw;
@@ -57,6 +57,7 @@ LRFwindow::LRFwindow(QWidget *parent, MainWindow *mw, EventsDataClass *eventsDat
 
   Qt::WindowFlags windowFlags = (Qt::Window | Qt::CustomizeWindowHint);
   windowFlags |= Qt::WindowCloseButtonHint;
+  windowFlags |= Qt::Tool;
   this->setWindowFlags( windowFlags );
 
   StopSignal = false;
@@ -126,8 +127,8 @@ void LRFwindow::showLRF()
     json["Z"] = ui->ledZcenter->text().toDouble();
     json["DZ"] = ui->ledZrange->text().toDouble();
     json["EnergyScaling"] = ui->cbEnergyScalling->isChecked();
-    json["FunctionPointsX"] = MW->GlobSet->FunctionPointsX;
-    json["FunctionPointsY"] = MW->GlobSet->FunctionPointsY;
+    json["FunctionPointsX"] = MW->GlobSet.FunctionPointsX;
+    json["FunctionPointsY"] = MW->GlobSet.FunctionPointsY;
     //json["Bins"] = ui->sbNumBins_2->value();
     //json["ShowNodes"] = ui->cbShowNodePositions->isChecked();
 
@@ -143,16 +144,6 @@ void LRFwindow::on_pbStopLRFmake_clicked()
   StopSignal = true;
   ui->pbStopLRFmake->setText("stopping...");
   SensLRF->requestStop();
-}
-
-bool LRFwindow::event(QEvent *event)
-{
-  if (!MW->WindowNavigator) return QMainWindow::event(event);
-
-  if (event->type() == QEvent::Hide) MW->WindowNavigator->HideWindowTriggered("lrf");
-  if (event->type() == QEvent::Show) MW->WindowNavigator->ShowWindowTriggered("lrf");
-
-  return QMainWindow::event(event);
 }
 
 void LRFwindow::on_pbUpdateGUI_clicked()
@@ -269,9 +260,9 @@ void LRFwindow::SaveLRFDialog(QWidget* wid)
 
   QFileDialog *fileDialog = new QFileDialog;
   fileDialog->setDefaultSuffix("json");
-  QString fileName = fileDialog->getSaveFileName(this, "Save LRF Block", MW->GlobSet->LastOpenDir, "json files(*.json);;all files(*.*)");
+  QString fileName = fileDialog->getSaveFileName(this, "Save LRF Block", MW->GlobSet.LastOpenDir, "json files(*.json);;all files(*.*)");
   if (fileName.isEmpty()) return;
-  MW->GlobSet->LastOpenDir = QFileInfo(fileName).absolutePath();
+  MW->GlobSet.LastOpenDir = QFileInfo(fileName).absolutePath();
 
   int iCur = SensLRF->getCurrentIterIndex();
   if (iCur == -1)
@@ -316,9 +307,9 @@ void LRFwindow::on_pbSaveIterations_clicked()
       return;
     }
 
-  QString fileName = QFileDialog::getSaveFileName(this, "Save all Iterations: provided name will be used to create a dir", MW->GlobSet->LastOpenDir, "json files(*.json);;all files(*.*)");
+  QString fileName = QFileDialog::getSaveFileName(this, "Save all Iterations: provided name will be used to create a dir", MW->GlobSet.LastOpenDir, "json files(*.json);;all files(*.*)");
   if (fileName.isEmpty()) return;
-  MW->GlobSet->LastOpenDir = QFileInfo(fileName).absolutePath();
+  MW->GlobSet.LastOpenDir = QFileInfo(fileName).absolutePath();
 
   QFileInfo fi(fileName);
   QString dir = fi.baseName();
@@ -352,9 +343,9 @@ void LRFwindow::on_pbLoadLRFs_clicked()
 
 void LRFwindow::LoadLRFDialog(QWidget* wid)
 {
-  QStringList fileNames = QFileDialog::getOpenFileNames(this, "Load LRF Block", MW->GlobSet->LastOpenDir, "JSON files (*.json)");
+  QStringList fileNames = QFileDialog::getOpenFileNames(this, "Load LRF Block", MW->GlobSet.LastOpenDir, "JSON files (*.json)");
   if (fileNames.isEmpty()) return;
-  MW->GlobSet->LastOpenDir = QFileInfo(fileNames.first()).absolutePath();
+  MW->GlobSet.LastOpenDir = QFileInfo(fileNames.first()).absolutePath();
 
   for (int ifile=0; ifile<fileNames.size(); ifile++)
     {
@@ -749,7 +740,7 @@ void LRFwindow::drawRadial()
    json["Z"] = ui->ledZcenter->text().toDouble();
    json["DZ"] = ui->ledZrange->text().toDouble();
    json["EnergyScaling"] = ui->cbEnergyScalling->isChecked();
-   json["FunctionPointsX"] = MW->GlobSet->FunctionPointsX;
+   json["FunctionPointsX"] = MW->GlobSet.FunctionPointsX;
    json["Bins"] = ui->sbNumBins_2->value();
    json["ShowNodes"] = ui->cbShowNodePositions->isChecked();
 
@@ -805,7 +796,9 @@ void LRFwindow::on_pbShowRadialForXY_clicked()
     MW->GraphWindow->ShowAndFocus();
     TString str = "LRF of pm#";
     str += ipm;
-    MW->GraphWindow->MakeGraph(&Rad, &LRF, 4, "Radial distance, mm", "LRF", 6, 1, 0, 0, "");
+    //MW->GraphWindow->MakeGraph(&Rad, &LRF, 4, "Radial distance, mm", "LRF", 6, 1, 0, 0, "");
+    TGraph * g = MW->GraphWindow->ConstructTGraph(Rad, LRF, "", "Radial distance, mm", "LRF", 4, 6, 1, 0, 0, 0);
+    MW->GraphWindow->Draw(g, "AP");
 }
 
 void LRFwindow::on_pbAxial3DvsZ_clicked()
@@ -838,7 +831,7 @@ void LRFwindow::on_pbAxial3DvsZ_clicked()
     double rr[3];
     rr[0] = radius;
     rr[1] = 0;
-    int bins = MW->GlobSet->FunctionPointsX;
+    int bins = MW->GlobSet.FunctionPointsX;
     double stepZ = (z1-z0)/bins;
     for (int i=0; i<bins; i++)
     {
@@ -887,8 +880,8 @@ void LRFwindow::on_pbAxial3DvsRandZ_clicked()
 
     double rr[3];
     rr[1] = 0;
-    int binsR = MW->GlobSet->FunctionPointsX;
-    int binsZ = MW->GlobSet->FunctionPointsY;
+    int binsR = MW->GlobSet.FunctionPointsX;
+    int binsZ = MW->GlobSet.FunctionPointsY;
     double stepR = (r1-r0)/binsR;
     double stepZ = (z1-z0)/binsZ;
     for (int ir=0; ir<binsR; ir++)
@@ -1359,10 +1352,10 @@ void LRFwindow::on_pbRadialToText_clicked()
     }
 
     QString str = ui->sbPMnoButons->text();
-    QString fileName = QFileDialog::getSaveFileName(this, "Save LRF # " +str+ " vs radius", MW->GlobSet->LastOpenDir,
+    QString fileName = QFileDialog::getSaveFileName(this, "Save LRF # " +str+ " vs radius", MW->GlobSet.LastOpenDir,
                                                    "Text files (*.txt);;Data files (*.dat);;All files (*.*)");
     if (fileName.isEmpty()) return;
-    MW->GlobSet->LastOpenDir = QFileInfo(fileName).absolutePath();
+    MW->GlobSet.LastOpenDir = QFileInfo(fileName).absolutePath();
 
     QFile outputFile(fileName);
     outputFile.open(QIODevice::WriteOnly);
@@ -1410,7 +1403,7 @@ void LRFwindow::on_pbShowSensorGroups_clicked()
   MW->clearGeoMarkers();
   MW->GeometryWindow->on_pbTop_clicked();
   MW->GeometryWindow->ShowGeometry();
-  MW->GeometryWindow->ShowTextOnPMs(tmp, kBlue);
+  MW->GeometryWindow->ShowText(tmp, kBlue);
 }
 
 void LRFwindow::on_pbShowSensorGains_clicked()
@@ -1426,7 +1419,7 @@ void LRFwindow::on_pbShowSensorGains_clicked()
     MW->clearGeoMarkers();
     MW->GeometryWindow->on_pbTop_clicked();
     MW->GeometryWindow->ShowGeometry();
-    MW->GeometryWindow->ShowTextOnPMs(tmp, kBlue);
+    MW->GeometryWindow->ShowText(tmp, kBlue);
 }
 
 void LRFwindow::on_led_compression_k_editingFinished()
@@ -1455,9 +1448,9 @@ void LRFwindow::on_pbTableToAxial_clicked()
     ui->cob2Dtype->setCurrentIndex(0);
     ui->cbMakePMGroup->setChecked(false);
 
-    QString fileName = QFileDialog::getOpenFileName(this, "LRF table file", MW->GlobSet->LastOpenDir, "Data files (*.dat);;Text files (*.txt);;All files (*.*)");
+    QString fileName = QFileDialog::getOpenFileName(this, "LRF table file", MW->GlobSet.LastOpenDir, "Data files (*.dat);;Text files (*.txt);;All files (*.*)");
     if (fileName.isEmpty()) return;
-    //MW->GlobSet->LastOpenDir = QFileInfo(fileName).absolutePath();
+    //MW->GlobSet.LastOpenDir = QFileInfo(fileName).absolutePath();
 
     QFileInfo fi(fileName);
     QString ext = fi.suffix();
@@ -1519,7 +1512,7 @@ void LRFwindow::on_actionPM_groups_triggered()
       for(unsigned int j = 0; j < sensors->size(); j++)
         tmp[(*sensors)[j].GetIndex()].append(QString::number(igrp,'g', 4));
   }
-  MW->GeometryWindow->ShowTextOnPMs(tmp, kBlue);
+  MW->GeometryWindow->ShowText(tmp, kBlue);
 }
 
 void LRFwindow::on_actionRelative_gain_triggered()
@@ -1529,7 +1522,7 @@ void LRFwindow::on_actionRelative_gain_triggered()
   for (int i=0; i<PMs->count(); i++)
       tmp.append(QString::number(SensLRF->getSensor(i)->GetGain(),'g', 4));
 
-  MW->GeometryWindow->ShowTextOnPMs(tmp, kBlue);
+  MW->GeometryWindow->ShowText(tmp, kBlue);
 }
 
 void LRFwindow::on_actionX_shift_triggered()
@@ -1559,7 +1552,7 @@ void LRFwindow::ShowTransform(int type)
         tmp.append(QString::number(t[type%3],'g', 4).append(flip ? "F" : ""));
     }
 
-    MW->GeometryWindow->ShowTextOnPMs(tmp, kBlue);
+    MW->GeometryWindow->ShowText(tmp, kBlue);
 }
 
 void LRFwindow::on_pbLRFexplorer_clicked()

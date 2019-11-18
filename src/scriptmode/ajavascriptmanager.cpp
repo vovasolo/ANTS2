@@ -1,13 +1,18 @@
 #include "ajavascriptmanager.h"
-#include "ainterfacetomessagewindow.h"
-#include "coreinterfaces.h"
+
+#ifdef GUI
+#include "amsg_si.h"
+#endif
+
+#include "ascriptinterface.h"
+#include "acore_si.h"
+#include "amath_si.h"
 #include "ascriptinterfacefactory.h"
-#include "ainterfacetomultithread.h"
+#include "athreads_si.h"
 
 #include <QScriptEngine>
 #include <QDebug>
 #include <QScriptValueIterator>
-#include <QDialog>
 #include <QElapsedTimer>
 
 AJavaScriptManager::AJavaScriptManager(TRandom2* RandGen) :
@@ -25,13 +30,47 @@ AJavaScriptManager::~AJavaScriptManager()
         engine->deleteLater();
         engine = 0;
     }
-
+#ifdef GUI
     for (AScriptMessengerDialog* d : ThreadMessangerDialogs)
     {
         delete d;
         d = 0;
     }
     ThreadMessangerDialogs.clear();
+#endif
+}
+
+void AJavaScriptManager::addQVariantToString(const QVariant & var, QString & string)
+{
+    switch (var.type())
+    {
+    case QVariant::Map:
+      {
+        string += '{';
+        const QMap<QString, QVariant> map = var.toMap();
+        for (const QString & k : map.keys())
+        {
+            string += QString("\"%1\":").arg(k);
+            addQVariantToString(map.value(k), string);
+            string += ", ";
+        }
+        if (string.endsWith(", ")) string.chop(2);
+        string += '}';
+        break;
+      }
+    case QVariant::List:
+        string += '[';
+        for (const QVariant & v : var.toList())
+        {
+            addQVariantToString(v, string);
+            string += ", ";
+        }
+        if (string.endsWith(", ")) string.chop(2);
+        string += ']';
+        break;
+    default:
+        string += var.toString();// implicit convertion to string
+    }
 }
 
 QString AJavaScriptManager::Evaluate(const QString& Script)
@@ -59,15 +98,21 @@ QString AJavaScriptManager::Evaluate(const QString& Script)
     timeOfStart = timer->restart();
 
     fEngineIsRunning = true;
-    QScriptValue scriptreturn = engine->evaluate(Script);
+    EvaluationResult = engine->evaluate(Script);
     fEngineIsRunning = false;
 
     timerEvalTookMs = timer->elapsed();
     delete timer; timer = 0;
 
-    QString result = scriptreturn.toString();
-    emit onFinish(result);
+    QString result;
+    if (EvaluationResult.isArray() || EvaluationResult.isObject())
+    {
+        QVariant resVar = EvaluationResult.toVariant();
+        addQVariantToString(resVar, result);
+    }
+    else result = EvaluationResult.toString();
 
+    emit onFinish(result);
     return result;
 }
 
@@ -109,6 +154,7 @@ QScriptValue AJavaScriptManager::getMinimalizationFunction()
     return engine->globalObject().property(MiniFunctionName);
 }
 
+#ifdef GUI
 void AJavaScriptManager::hideAllMessengerWidgets()
 {
     for (AScriptMessengerDialog* d : ThreadMessangerDialogs)
@@ -125,7 +171,7 @@ void AJavaScriptManager::clearUnusedMsgDialogs()
 {
     for (int i=0; i<interfaces.size(); i++)
     {
-        AInterfaceToMultiThread* t = dynamic_cast<AInterfaceToMultiThread*>(interfaces[i]);
+        AThreads_SI* t = dynamic_cast<AThreads_SI*>(interfaces[i]);
         if (t)
         {
             int numThreads = t->countAll();
@@ -144,6 +190,25 @@ void AJavaScriptManager::closeAllMsgDialogs()
         if (d) d->Hide();
 }
 
+void AJavaScriptManager::hideMsgDialogs()
+{
+    AScriptManager::hideMsgDialogs();
+
+    for (AScriptMessengerDialog* d : ThreadMessangerDialogs)
+        if (d) d->HideWidget();
+}
+
+void AJavaScriptManager::restoreMsgDialogs()
+{
+    AScriptManager::restoreMsgDialogs();
+
+    for (AScriptMessengerDialog* d : ThreadMessangerDialogs)
+        if (d)
+            if (d->IsShown()) d->RestoreWidget();
+}
+#endif
+
+/*
 void AJavaScriptManager::SetInterfaceObject(QObject *interfaceObject, QString name)
 {
     //qDebug() << "Registering:" << interfaceObject << name;
@@ -161,12 +226,12 @@ void AJavaScriptManager::SetInterfaceObject(QObject *interfaceObject, QString na
         engine->globalObject().setProperty(coreName, coreVal);
         interfaces.append(coreObj);
         //registering math module
-        QObject* mathObj = new AInterfaceToMath(RandGen);
+        QObject* mathObj = new AMathScriptInterface(RandGen);
         QScriptValue mathVal = engine->newQObject(mathObj, QScriptEngine::QtOwnership);
         QString mathName = "math";
         mathObj->setObjectName(mathName);
         engine->globalObject().setProperty(mathName, mathVal);
-        interfaces.append(mathObj);  //SERVICE OBJECT IS FIRST in interfaces!
+        interfaces.append(mathObj);
       }
     else
       { // name is not empty - this is one of the secondary modules
@@ -182,7 +247,48 @@ void AJavaScriptManager::SetInterfaceObject(QObject *interfaceObject, QString na
         int index = interfaceObject->metaObject()->indexOfSignal("AbortScriptEvaluation(QString)");
         if (index != -1)
             QObject::connect(interfaceObject, "2AbortScriptEvaluation(QString)", this, SLOT(AbortEvaluation(QString)));  //1-slot, 2-signal
-      }
+    }
+}
+*/
+
+void AJavaScriptManager::RegisterInterfaceAsGlobal(AScriptInterface *interface)
+{
+    QScriptValue obj = engine->newQObject(interface, QScriptEngine::QtOwnership);
+    engine->setGlobalObject(obj);
+    doRegister(interface, "");
+}
+
+void AJavaScriptManager::RegisterCoreInterfaces(bool bCore, bool bMath)
+{
+    if (bCore)
+    {
+        coreObj = new ACore_SI(this);
+        QScriptValue coreVal = engine->newQObject(coreObj, QScriptEngine::QtOwnership);
+        engine->globalObject().setProperty("core", coreVal);
+        doRegister(coreObj, "core");
+    }
+
+    if (bMath)
+    {
+        AMath_SI* mathObj = new AMath_SI(RandGen);
+        QScriptValue mathVal = engine->newQObject(mathObj, QScriptEngine::QtOwnership);
+        engine->globalObject().setProperty("math", mathVal);
+        doRegister(mathObj, "math");
+    }
+}
+
+void AJavaScriptManager::RegisterInterface(AScriptInterface *interface, const QString &name)
+{
+    QScriptValue obj = engine->newQObject(interface, QScriptEngine::QtOwnership);
+    engine->globalObject().setProperty(name, obj);
+    doRegister(interface, name);
+}
+
+void AJavaScriptManager::doRegister(AScriptInterface *interface, const QString &name)
+{
+    interface->setObjectName(name);
+    interfaces.append(interface);
+    QObject::connect(interface, &AScriptInterface::AbortScriptEvaluation, this, &AJavaScriptManager::AbortEvaluation);
 }
 
 int AJavaScriptManager::FindSyntaxError(const QString& script)
@@ -197,22 +303,6 @@ int AJavaScriptManager::FindSyntaxError(const QString& script)
       }
 }
 
-void AJavaScriptManager::hideMsgDialogs()
-{
-    AScriptManager::hideMsgDialogs();
-
-    for (AScriptMessengerDialog* d : ThreadMessangerDialogs)
-        if (d) d->HideWidget();
-}
-
-void AJavaScriptManager::restoreMsgDialogs()
-{
-    AScriptManager::restoreMsgDialogs();
-
-    for (AScriptMessengerDialog* d : ThreadMessangerDialogs)
-        if (d)
-            if (d->IsShown()) d->RestoreWidget();
-}
 
 // ------------ multithreading -------------
 //https://stackoverflow.com/questions/5020459/deep-copy-of-a-qscriptvalue-as-global-object
@@ -402,36 +492,39 @@ QScriptValue ScriptCopier::copy(const QScriptValue& obj)
     return copy;
 }
 
-AJavaScriptManager *AJavaScriptManager::createNewScriptManager(int threadNumber)
+#include "TRandom2.h"
+AJavaScriptManager *AJavaScriptManager::createNewScriptManager(int threadNumber, bool bAbortIsGlobal)
 {
-    AJavaScriptManager* sm = new AJavaScriptManager(RandGen);  // *** !!! make new RandGen one!!!
+    int seed = RandGen->Rndm()*100000;
+    TRandom2* rnd = new TRandom2(seed);
+    AJavaScriptManager* sm = new AJavaScriptManager(rnd);
+    sm->bOwnRandomGen = true;
+    sm->bShowAbortMessageInOutput = bAbortIsGlobal;
 
-    for (QObject* io : interfaces)
+    for (AScriptInterface* si : interfaces)
     {
-        AScriptInterface* si = dynamic_cast<AScriptInterface*>(io);
-        if (!si) continue;
-
         if (!si->IsMultithreadCapable()) continue;
 
-        QObject* copy = AScriptInterfaceFactory::makeCopy(io); //cloning script interfaces
+        AScriptInterface* copy = AScriptInterfaceFactory::makeCopy(si); //cloning script interfaces
         if (copy)
         {
             //  qDebug() << "Making available for multi-thread use: "<<io->objectName();
 
             //special for core unit
-            AInterfaceToCore* core = dynamic_cast<AInterfaceToCore*>(copy);
+            ACore_SI* core = dynamic_cast<ACore_SI*>(copy);
             if (core)
             {
                 //qDebug() << "--this is core";
                 core->SetScriptManager(sm);
             }
-            AInterfaceToMinimizerJavaScript* mini = dynamic_cast<AInterfaceToMinimizerJavaScript*>(copy);
+            AMini_JavaScript_SI* mini = dynamic_cast<AMini_JavaScript_SI*>(copy);
             if (mini)
             {
                 //qDebug() << "--this is mini";
                 mini->SetScriptManager(sm);
             }
-            AInterfaceToMessageWindow* msg = dynamic_cast<AInterfaceToMessageWindow*>(copy);
+#ifdef GUI
+            AMsg_SI* msg = dynamic_cast<AMsg_SI*>(copy);
             if (msg)
             {
                 //  qDebug() << "Handling messanger widget for thread#"<<threadNumber;
@@ -456,18 +549,45 @@ AJavaScriptManager *AJavaScriptManager::createNewScriptManager(int threadNumber)
                     msg->Move(50 + threadNumber*50, 50 + threadNumber*30);
                 }
             }
-
+#endif
             // connecting the request for abort script
-            AScriptInterface* base = dynamic_cast<AScriptInterface*>(copy);
-            if (base) connect(base, &AScriptInterface::AbortScriptEvaluation, coreObj, &AInterfaceToCore::abort);
+            if (bAbortIsGlobal)
+            {
+                AScriptInterface* base = dynamic_cast<AScriptInterface*>(copy);
+                if (base) connect(base, &AScriptInterface::AbortScriptEvaluation, coreObj, &ACore_SI::abort);
+            }
 
-            sm->SetInterfaceObject(copy, io->objectName());
+            sm->RegisterInterface(copy, si->objectName());
         }
         else
         {
-            qDebug() << "Unknown interface object type for unit" << io->objectName();
+            qDebug() << "Unknown interface object type for unit" << si->objectName();
         }
     }
+
+
+
+#ifdef GUI
+    //connect web and msg
+    AWeb_SI* web = 0;
+    AMsg_SI* msg = 0;
+    for (QObject* io : sm->interfaces)
+    {
+        AMsg_SI* ob = dynamic_cast<AMsg_SI*>(io);
+        if (ob) msg = ob;
+        else
+        {
+            AWeb_SI* ob = dynamic_cast<AWeb_SI*>(io);
+            if (ob) web = ob;
+        }
+    }
+//    qDebug() << "-----------"<<msg << web;
+    if (msg && web)
+    {
+        QObject::connect(web, &AWeb_SI::showTextOnMessageWindow, msg, &AMsg_SI::Append);
+        QObject::connect(web, &AWeb_SI::clearTextOnMessageWindow, msg, &AMsg_SI::Clear);
+    }
+#endif
 
     QScriptValue global = engine->globalObject();
     ScriptCopier SC(*sm->engine);
@@ -496,10 +616,10 @@ AJavaScriptManager *AJavaScriptManager::createNewScriptManager(int threadNumber)
             //  qDebug() << "    Skipped: already have this property!";
           }
     }
-
+#ifdef GUI
     //connect core.print() to the ScriptManager of the GUI thread, as queued!
     connect(sm, &AJavaScriptManager::showMessage, this, &AJavaScriptManager::showMessage, Qt::QueuedConnection);
-
+#endif
     //  qDebug() << "  Scriptmanager created!"<<sm;
     return sm;
 }

@@ -4,10 +4,12 @@
 //#include "awebsocketserver.h"
 #include "awebsocketsessionserver.h"
 #ifdef USE_ROOT_HTML
-#include "aroothttpserver.h"
+    #include "aroothttpserver.h"
 #endif
 
 #include <QDebug>
+
+#include "TGeoManager.h"
 
 ANetworkModule::ANetworkModule()
 {
@@ -15,6 +17,7 @@ ANetworkModule::ANetworkModule()
 
     QObject::connect(WebSocketServer, &AWebSocketSessionServer::textMessageReceived, this, &ANetworkModule::OnWebSocketTextMessageReceived);
     QObject::connect(WebSocketServer, &AWebSocketSessionServer::reportToGUI, this, &ANetworkModule::ReportTextToGUI);
+    QObject::connect(WebSocketServer, &AWebSocketSessionServer::clientDisconnected, this, &ANetworkModule::OnClientDisconnected);
 
     QObject::connect(this, &ANetworkModule::ProgressReport, WebSocketServer, &AWebSocketSessionServer::onProgressChanged);
 }
@@ -44,15 +47,21 @@ int ANetworkModule::getWebSocketPort() const
     return WebSocketServer->GetPort();
 }
 
-const QString ANetworkModule::getWebSocketURL() const
+const QString ANetworkModule::getWebSocketServerURL() const
 {
   if (!WebSocketServer) return "";
   return WebSocketServer->GetUrl();
 }
 
-int ANetworkModule::getRootServerPort() const
+const QString ANetworkModule::getWebSocketServerURL()
 {
-  return RootServerPort;
+    return WebSocketServer->GetUrl();
+}
+
+void ANetworkModule::SetTicket(const QString &ticket)
+{
+    Ticket = ticket;
+    bTicketChecked = false;
 }
 
 bool ANetworkModule::isRootServerRunning() const
@@ -63,10 +72,18 @@ bool ANetworkModule::isRootServerRunning() const
   return false;
 }
 
-void ANetworkModule::StartWebSocketServer(quint16 port)
-{
-    WebSocketServer->StartListen(port);
+void ANetworkModule::StartWebSocketServer(QHostAddress ip, quint16 port)
+{    
+    WebSocketServer->StartListen(ip, port);
     emit StatusChanged();
+
+    if (bSingleConnectionMode)
+    {
+        IdleTimer.setInterval(SelfDestructOnIdle);
+        IdleTimer.setSingleShot(true);
+        QObject::connect(&IdleTimer, &QTimer::timeout, this, &ANetworkModule::onIdleTimerTriggered);
+        IdleTimer.start();
+    }
 }
 
 void ANetworkModule::StopWebSocketServer()
@@ -76,64 +93,139 @@ void ANetworkModule::StopWebSocketServer()
     emit StatusChanged();
 }
 
-void ANetworkModule::StartRootHttpServer(unsigned int port, QString OptionalUrlJsRoot)
+#include "aglobalsettings.h"
+bool ANetworkModule::StartRootHttpServer()
 {
 #ifdef USE_ROOT_HTML
-    delete RootHttpServer;
-    RootHttpServer = new ARootHttpServer(port, OptionalUrlJsRoot);
+    const AGlobalSettings & GlobSet = AGlobalSettings::getInstance();
 
-    JSROOT = OptionalUrlJsRoot;
-    RootServerPort = port;
-    qDebug() << "ANTS2 root server is now listening";
-    emit StatusChanged();
-    emit RootServerStarted(); //to update current geometry on the server
+    delete RootHttpServer;
+    RootHttpServer = new ARootHttpServer(GlobSet.RootServerPort, GlobSet.ExternalJSROOT);
+
+    if (RootHttpServer->isRunning())
+    {
+        qDebug() << "ANTS2 root server is now listening";
+        emit StatusChanged();
+        emit RootServerStarted(); //to update current geometry on the server
+        return true;
+    }
+    else
+    {
+        delete RootHttpServer; RootHttpServer = nullptr;
+        qDebug() << "Root http server failed to start!\nCheck if another server is already listening at this port";
+        return false;
+    }
 #endif
 }
+
 void ANetworkModule::StopRootHttpServer()
 {
 #ifdef USE_ROOT_HTML
     delete RootHttpServer;
-    RootHttpServer = 0;
+    RootHttpServer = nullptr;
 
     qDebug() << "ANTS2 root server has stopped listening";
     emit StatusChanged();
 #endif
 }
 
-void ANetworkModule::onNewGeoManagerCreated(TObject *GeoManager)
+void ANetworkModule::onNewGeoManagerCreated()
 {
 #ifdef USE_ROOT_HTML
     if (!RootHttpServer) return;
-    RootHttpServer->UpdateGeoWorld(GeoManager);
+    RootHttpServer->UpdateGeo(gGeoManager);
 #endif
 }
 
+#include <QJsonObject>
+#include <QJsonDocument>
 void ANetworkModule::OnWebSocketTextMessageReceived(QString message)
 {
-    qDebug() << "Message received by websocket server -> running as script";
-    int line = ScriptManager->FindSyntaxError(message);
-    if (line != -1)
-    {
-       qDebug() << "Syntaxt error!";
-       WebSocketServer->ReplyWithText("Error: Syntax check failed");
-    }
-    else
-    {
-        QString res = ScriptManager->Evaluate(message);
-        qDebug() << "Script evaluation result:"<<res;
+    if (bSingleConnectionMode) IdleTimer.stop();
 
-        if (ScriptManager->isEvalAborted())
+    if (message.startsWith("__"))
+    {
+        qDebug() << "WebSocket server received system message:"<<message;
+        message.remove(0, 2);
+        QJsonDocument doc = QJsonDocument::fromJson(message.toUtf8());
+        QJsonObject json = doc.object();
+
+        if (json.contains("ticket"))
         {
-            WebSocketServer->ReplyWithText("Error: aborted -> " + ScriptManager->getLastError());
+            QString receivedTicket = json["ticket"].toString();
+            qDebug() << "  Ticket presented" << receivedTicket;
+            if ( receivedTicket == Ticket || Ticket.isEmpty() )
+            {
+                bTicketChecked = true;
+                qDebug() << "  Ticket is valid!";
+                WebSocketServer->sendOK();
+            }
+            else
+            {
+                qDebug() << "  Invalid ticket!";
+                WebSocketServer->sendError("Invalid ticket");
+                WebSocketServer->DisconnectClient();
+                return;
+            }
         }
         else
         {
-            if ( !WebSocketServer->isReplied() )
+            qDebug() << "  System message not recognized!";
+            WebSocketServer->sendError("Unknown system message");
+            WebSocketServer->DisconnectClient();
+            return;
+        }
+    }
+    else
+    {
+        qDebug() << "Websocket server: Message (script) received";
+        if (!bTicketChecked)
+        {
+            qDebug() << "  Ticket is required, but has not been validated, disconnecting";
+            WebSocketServer->sendError("Ticket was not validated");
+            WebSocketServer->DisconnectClient();
+            return;
+        }
+
+        qDebug() << "  Evaluating as JavaScript";
+
+        int line = ScriptManager->FindSyntaxError(message);
+        if (line != -1)
+        {
+           qDebug() << "Syntaxt error!";
+           WebSocketServer->sendError("  Syntax check failed - message is not a valid JavaScript");
+        }
+        else
+        {
+            QString res = ScriptManager->Evaluate(message);
+            qDebug() << "  Script evaluation result:"<<res;
+
+            if (ScriptManager->isEvalAborted())
             {
-                if (res == "undefined") WebSocketServer->ReplyWithText("OK");
-                else WebSocketServer->ReplyWithText(res);
+                qDebug() << "  Was aborted:" << ScriptManager->getLastError();
+                WebSocketServer->sendError("Aborted -> " + ScriptManager->getLastError());
+            }
+            else
+            {
+                if ( !WebSocketServer->isReplied() )
+                {
+                    if (res == "undefined") WebSocketServer->sendOK();
+                    else WebSocketServer->ReplyWithText("{ \"result\" : true, \"evaluation\" : \"" + res + "\" }");
+                }
             }
         }
-        //WebSocketServer->ReplyWithText("UpdateGeometry");
     }
+
+    if (bSingleConnectionMode) IdleTimer.start();
+}
+
+void ANetworkModule::OnClientDisconnected()
+{
+    if (bSingleConnectionMode) exit(0);
+}
+
+void ANetworkModule::onIdleTimerTriggered()
+{
+    qDebug() << "Idle time limit reached, exiting";
+    exit(1);
 }

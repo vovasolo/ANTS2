@@ -21,7 +21,7 @@
 #include "eventsdataclass.h"
 #include "dynamicpassiveshandler.h"
 #include "areconstructionmanager.h"
-#include "globalsettingsclass.h"
+#include "aglobalsettings.h"
 #include "arootlineconfigurator.h"
 #include "ageomarkerclass.h"
 #include "apositionenergyrecords.h"
@@ -209,7 +209,7 @@ void ReconstructionWindow::UpdateStatusAllEvents()
 
   if (EventsDataHub->isEmpty()) return;
 
-  ReconstructionManager->filterEvents(MW->Config->JSON, MW->GlobSet->NumThreads);
+  ReconstructionManager->filterEvents(MW->Config->JSON, MW->GlobSet.NumThreads);
   //   qDebug() << "  Found good events:"<<EventsDataHub->countGoodEvents();
   //qDebug() << "Update done";
 }
@@ -273,7 +273,7 @@ void ReconstructionWindow::on_sbEventNumberInspect_valueChanged(int arg1)
           MW->GeoMarkers.append(marks);
         }
       MW->GeometryWindow->ShowGeometry(false);  //to clear view
-      MW->ShowTracks(); //has to use ShowTracks since if there is continuos energy deposition - tracks are used for inidication
+      MW->GeometryWindow->DrawTracks(); //has to use ShowTracks since if there is continuos energy deposition - tracks are used for inidication
     }
 }
 
@@ -329,21 +329,25 @@ void ReconstructionWindow::on_pbClearPositions_clicked()
 
 void ReconstructionWindow::on_pbShowReconstructionPositions_clicked()
 {    
-    ShowPositions(0);
+    QString err = ShowPositions(0);
+    if (!err.isEmpty())
+        message(err, this);
 }
 
 void ReconstructionWindow::on_pbShowTruePositions_clicked()
 {
-    ShowPositions(1);
+    QString err = ShowPositions(1);
+    if (!err.isEmpty())
+        message(err, this);
 }
 
-void ReconstructionWindow::ShowPositions(int Rec_True, bool fOnlyIfWindowVisible)
+const QString ReconstructionWindow::ShowPositions(int Rec_True, bool fOnlyIfWindowVisible)
 {
-    if (fOnlyIfWindowVisible && !MW->GeometryWindow->isVisible()) return;
+    if (fOnlyIfWindowVisible && !MW->GeometryWindow->isVisible()) return "";
     if (Rec_True<0 || Rec_True>1)
     {
         qWarning() << "Wrong index in ShowPositions";
-        return;
+        return "";
     }
 
     int CurrentGroup = PMgroups->getCurrentGroup();
@@ -354,21 +358,13 @@ void ReconstructionWindow::ShowPositions(int Rec_True, bool fOnlyIfWindowVisible
     if (Rec_True == 0)
     {
         int CurrentGroup = PMgroups->getCurrentGroup();
-        if (!fRecReady)
-        {
-            message("Reconstruction not ready!", this);
-            return;
-        }
+        if (!fRecReady) return "Reconstruction not ready!";
         numEvents = EventsDataHub->ReconstructionData[CurrentGroup].size();
         marks = new GeoMarkerClass("Recon", 6, 2, kRed);
     }
-    else if (Rec_True == 1)
+    else
     {
-        if (EventsDataHub->isScanEmpty())
-        {
-            message("There are no true positions available!", this);
-            return;
-        }
+        if (EventsDataHub->isScanEmpty()) return "There are no data to show!";
         numEvents = EventsDataHub->Scan.size();
         marks = new GeoMarkerClass("Scan", 6, 2, kBlue);
     }
@@ -434,7 +430,8 @@ void ReconstructionWindow::ShowPositions(int Rec_True, bool fOnlyIfWindowVisible
     MW->GeometryWindow->raise();
     MW->GeometryWindow->activateWindow();
     MW->GeometryWindow->ShowGeometry(false);
-    MW->ShowTracks();
+    MW->GeometryWindow->DrawTracks();
+    return "";
 }
 
 /*
@@ -499,16 +496,17 @@ void ReconstructionWindow::DotActualPositions()
   if (!EventsDataHub->isScanEmpty()) ReconstructionWindow::VisualizeScan();  
 }
 
+#include "asimulationmanager.h"
 void ReconstructionWindow::VisualizeEnergyVector(int eventId)
 {
-  if (MW->EnergyVector.isEmpty()) return;
-
-//  qDebug()<<"EnergyVector contains "<<MW->EnergyVector.size()<<" cells";
+  QVector<AEnergyDepositionCell *> & EnergyVector = MW->SimulationManager->EnergyVector;
+  if (EnergyVector.isEmpty()) return;
+  //  qDebug()<<"EnergyVector contains "<<EnergyVector.size()<<" cells";
 
   QVector<AEnergyDepositionCell*> EV;
   EV.resize(0);
-  for (int i=0; i<MW->EnergyVector.size(); i++)
-    if (MW->EnergyVector.at(i)->eventId == eventId) EV.append(MW->EnergyVector.at(i));
+  for (int i=0; i<EnergyVector.size(); i++)
+    if (EnergyVector.at(i)->eventId == eventId) EV.append(EnergyVector.at(i));
 
 //  qDebug()<<"This event ( "<< eventId <<" ) has "<<EV.size()<<" associated cells";
 
@@ -648,10 +646,10 @@ void ReconstructionWindow::on_pbCutOffsLoad_clicked()
 {
   QString fileName = QFileDialog::getOpenFileName(this,
                                                   "Load individual cut-offs (ignores first column with PM number)",
-                                                  MW->GlobSet->LastOpenDir, "Data files (*.dat);;Text files (*.txt)");
+                                                  MW->GlobSet.LastOpenDir, "Data files (*.dat);;Text files (*.txt)");
 
   if (fileName.isEmpty()) return;
-  MW->GlobSet->LastOpenDir = QFileInfo(fileName).absolutePath();
+  MW->GlobSet.LastOpenDir = QFileInfo(fileName).absolutePath();
 
   LoadIndividualCutOffs(fileName);
   UpdateStatusAllEvents();  
@@ -679,10 +677,10 @@ void ReconstructionWindow::LoadIndividualCutOffs(QString fileName)
 void ReconstructionWindow::on_pbCutOffsSave_clicked()
 {
   QString fileName = QFileDialog::getSaveFileName(this,
-                                                  "Save individual cut-offs", MW->GlobSet->LastOpenDir, "Data files (*.dat);;Text files (*.txt)");
+                                                  "Save individual cut-offs", MW->GlobSet.LastOpenDir, "Data files (*.dat);;Text files (*.txt)");
 
   if (fileName.isEmpty()) return;
-  MW->GlobSet->LastOpenDir = QFileInfo(fileName).absolutePath();
+  MW->GlobSet.LastOpenDir = QFileInfo(fileName).absolutePath();
 
   ReconstructionWindow::SaveIndividualCutOffs(fileName);
 }
@@ -725,11 +723,11 @@ void ReconstructionWindow::on_pbShowSumSignal_clicked()
   int totNumEvents = EventsDataHub->Events.size();
   if ( totNumEvents == 0) return;
 
-  auto hist1D = new TH1D("haSumSign","Sum signal",MW->GlobSet->BinsX, 0,0);
+  auto hist1D = new TH1D("haSumSign","Sum signal",MW->GlobSet.BinsX, 0,0);
   hist1D->SetXTitle("Sum signal");
 
 #if ROOT_VERSION_CODE < ROOT_VERSION(6,0,0)
-  hist1D->SetBit(TH1::kCanRebin);
+  if (!ui->cbFilterSumSignal->isChecked()) hist1D->SetBit(TH1::kCanRebin);
 #endif
 
   int counter = 0;  
@@ -806,17 +804,17 @@ void ReconstructionWindow::ShowIndividualSpectrum(bool focus)
       max = PMgroups->getCutOffMax(thisipm, CurrentGroup);
 
       if ( min==-1.0e10 || max==1.0e10)
-        hist1D = new TH1D("haIndSpect", name, MW->GlobSet->BinsX, 0,0);
+        hist1D = new TH1D("haIndSpect", name, MW->GlobSet.BinsX, 0,0);
       else
-        hist1D = new TH1D("haIndSpect", name, MW->GlobSet->BinsX, min,max);
+        hist1D = new TH1D("haIndSpect", name, MW->GlobSet.BinsX, min,max);
     }
   else
-      hist1D = new TH1D("haIndSpect", name, MW->GlobSet->BinsX, 0,0);
+      hist1D = new TH1D("haIndSpect", name, MW->GlobSet.BinsX, 0,0);
 
   hist1D->SetXTitle("Signal");
 
 #if ROOT_VERSION_CODE < ROOT_VERSION(6,0,0)
-  hist1D->SetBit(TH1::kCanRebin);
+  if (!ui->cbFilterIndividualSignals->isChecked()) hist1D->SetBit(TH1::kCanRebin);
 #endif
 
   int counter = 0;
@@ -1198,10 +1196,10 @@ void ReconstructionWindow::ShowEnergySpectrum()
         return;
       }
 
-    auto hist1D = new TH1D("hist1ShEnSp","Energy spectrum", MW->GlobSet->BinsX, 0, 0);
+    auto hist1D = new TH1D("hist1ShEnSp","Energy spectrum", MW->GlobSet.BinsX, 0, 0);
 
 #if ROOT_VERSION_CODE < ROOT_VERSION(6,0,0)
-    hist1D->SetBit(TH1::kCanRebin);
+  if (!ui->cbActivateEnergyFilter->isChecked()) hist1D->SetBit(TH1::kCanRebin);
 #endif
 
     for (int i=0; i<EventsDataHub->ReconstructionData[CurrentGroup].size(); i++)
@@ -1254,10 +1252,11 @@ void ReconstructionWindow::ShowChi2Spectrum()
       return;
     }
 
-  auto hist1D = new TH1D("hist1Chi2Dis","Chi2 distribution", MW->GlobSet->BinsX, 0, 0);
+  auto hist1D = new TH1D("hist1Chi2Dis","Chi2 distribution", MW->GlobSet.BinsX, 0, 0);  
   hist1D->SetXTitle("Chi2");
+
 #if ROOT_VERSION_CODE < ROOT_VERSION(6,0,0)
-  hist1D->SetBit(TH1::kCanRebin);
+  if (!ui->cbActivateChi2Filter->isChecked()) hist1D->SetBit(TH1::kCanRebin);
 #endif
 
   for (int i=0; i<EventsDataHub->ReconstructionData[CurrentGroup].size(); i++)
@@ -1346,23 +1345,6 @@ void ReconstructionWindow::on_sbZshift_valueChanged(int arg1)
 void ReconstructionWindow::on_cobHowToAverageZ_currentIndexChanged(int index)
 {
   ui->fAverageZ->setVisible((bool)index);
-}
-
-bool ReconstructionWindow::event(QEvent *event)
-{
-  if (!MW->WindowNavigator) return QMainWindow::event(event);
-
-  if (event->type() == QEvent::Hide)
-    {      
-      MW->WindowNavigator->HideWindowTriggered("recon");
-      return true;
-    }
-  if (event->type() == QEvent::Show)
-    {
-      MW->WindowNavigator->ShowWindowTriggered("recon");
-    }
-
-  return QMainWindow::event(event);
 }
 
 bool ReconstructionWindow::ShowVsXY(QString strIn) //false - error
@@ -1667,7 +1649,7 @@ void ReconstructionWindow::on_pbShowSpatialFilter_clicked()
         ReconstructionWindow::DrawPolygon(ui->ledSpFfromZ->text().toDouble());
         ReconstructionWindow::DrawPolygon(ui->ledSpFtoZ->text().toDouble());
       }
-    MW->ShowTracks();
+    MW->GeometryWindow->DrawTracks();
 }
 
 void ReconstructionWindow::DrawPolygon(double z)
@@ -1971,7 +1953,7 @@ void ReconstructionWindow::on_pbShowPassivePMs_clicked()
             track->SetLineColor(30);
         }
     }
-    MW->ShowTracks();
+    MW->GeometryWindow->DrawTracks();
 }
 
 void ReconstructionWindow::on_pbAllPMsActive_clicked()
@@ -2223,7 +2205,7 @@ void ReconstructionWindow::on_pbShowAllGainsForGroup_clicked()
       else str = "";
       tmp.append( str );
     }
-  MW->GeometryWindow->ShowTextOnPMs(tmp, kBlue);
+  MW->GeometryWindow->ShowText(tmp, kBlue);
 }
 
 void ReconstructionWindow::on_pbGainsToUnity_clicked()
@@ -2292,9 +2274,9 @@ void ReconstructionWindow::on_pbFindNextPMinGains_clicked()
 
 void ReconstructionWindow::on_pbSaveGains_clicked()
 {
-    QString fileName = QFileDialog::getSaveFileName(this, "Save gains", MW->GlobSet->LastOpenDir, "Data files (*.dat);;Text files (*.txt);;All files (*.*)");
+    QString fileName = QFileDialog::getSaveFileName(this, "Save gains", MW->GlobSet.LastOpenDir, "Data files (*.dat);;Text files (*.txt);;All files (*.*)");
     if (fileName.isEmpty()) return;
-    MW->GlobSet->LastOpenDir = QFileInfo(fileName).absolutePath();
+    MW->GlobSet.LastOpenDir = QFileInfo(fileName).absolutePath();
     QFileInfo file(fileName);
     if(file.suffix().isEmpty()) fileName += ".dat";
     QFile outputFile(fileName);
@@ -2318,10 +2300,10 @@ void ReconstructionWindow::on_pbSaveGains_clicked()
 
 void ReconstructionWindow::on_pbLoadGains_clicked()
 {
-  QString fileName = QFileDialog::getOpenFileName(this, "Load gains", MW->GlobSet->LastOpenDir, "Data files (*.dat);;Text files (*.txt);;All files (*.*)");
+  QString fileName = QFileDialog::getOpenFileName(this, "Load gains", MW->GlobSet.LastOpenDir, "Data files (*.dat);;Text files (*.txt);;All files (*.*)");
 //  qDebug()<<fileName;
   if (fileName.isEmpty()) return;
-  MW->GlobSet->LastOpenDir = QFileInfo(fileName).absolutePath();  
+  MW->GlobSet.LastOpenDir = QFileInfo(fileName).absolutePath();
   QVector<double> num, gain;
   LoadDoubleVectorsFromFile(fileName, &num, &gain);  //cleans previous data
 
@@ -3377,11 +3359,13 @@ void ReconstructionWindow::on_pbLoadEnergySpectrum_clicked()
       return;
   }
 
-  auto hist1D = new TH1D("hist1ShLoEnSp","True/loaded energy", MW->GlobSet->BinsX, 0, 0);
+  auto hist1D = new TH1D("hist1ShLoEnSp","True/loaded energy", MW->GlobSet.BinsX, 0, 0);
   hist1D->SetXTitle("True or loaded energy");
+
 #if ROOT_VERSION_CODE < ROOT_VERSION(6,0,0)
-  hist1D->SetBit(TH1::kCanRebin);
+  if (!ui->cbActivateLoadedEnergyFilter->isChecked()) hist1D->SetBit(TH1::kCanRebin);
 #endif
+
   //check filter status only of reconstruction has been done
   bool DoFiltering = false;
   if (!EventsDataHub->isReconstructionDataEmpty()) DoFiltering = true;
@@ -3609,13 +3593,11 @@ void ReconstructionWindow::ShowGainWindow()
       //qDebug()<<"-->Creating GainWindow";
       QWidget* w = new QWidget();
       MW->GainWindow = new GainEvaluatorWindowClass(w, MW, EventsDataHub);
-      //MW->GainWindow = new GainEvaluatorWindowClass(this, MW, EventsDataHub);
 
       // fix font size on Linux
       #ifdef Q_OS_WIN//Q_OS_LINUX
       #else
-        SetWindowFont(MW->GainWindow, 8);
-  //      GainWindow->SetWindowFont(8);
+        GuiUtils::SetWindowFont(MW->GainWindow, 8);
       #endif
       MW->GainWindow->show();
       MW->GainWindow->resize(MW->GainWindow->width()+1, MW->GainWindow->height());
@@ -4553,9 +4535,9 @@ void ReconstructionWindow::on_pbExportData_clicked()
     if (EventsDataHub->Events.isEmpty()) return;
     if (EventsDataHub->isReconstructionDataEmpty()) return;
 
-    QString fileName = QFileDialog::getSaveFileName(this, "Export data", MW->GlobSet->LastOpenDir, "Data files (*.dat);;Text files (*.txt)");
+    QString fileName = QFileDialog::getSaveFileName(this, "Export data", MW->GlobSet.LastOpenDir, "Data files (*.dat);;Text files (*.txt)");
     if (fileName.isEmpty()) return;
-    MW->GlobSet->LastOpenDir = QFileInfo(fileName).absolutePath();
+    MW->GlobSet.LastOpenDir = QFileInfo(fileName).absolutePath();
 
     QFile outFile( fileName );
     outFile.open(QIODevice::WriteOnly);
@@ -4985,9 +4967,6 @@ void ReconstructionWindow::updateReconSettings()
     gjson["InitialZ"] = ui->ledSuggestedZ->text().toDouble();
     gjson["IncludePassives"] = ui->cbIncludePassives->isChecked();
     gjson["WeightedChi2"] = ui->cbWeightedChi2->isChecked();
-    gjson["LimitSearchIfTrueIsSet"] = ui->cbLimitSearchToVicinity->isChecked();
-    gjson["RangeForLimitSearchIfTrueSet"] = ui->ledLimitSearchRange->text().toDouble();
-    gjson["LimitSearchGauss"] = ui->cbGaussWeightInMinimization->isChecked();
   RecJson["General"] = gjson;
 
   //Algotithm
@@ -5024,6 +5003,7 @@ void ReconstructionWindow::updateReconSettings()
   QJsonObject rootJson;
         rootJson["StartOption"] = ui->cobLSstartingXY->currentIndex();
         rootJson["Minuit2Option"] = ui->cobMinuit2Option->currentIndex();
+        rootJson["Formula"] = RootMinFormula;
         rootJson["LSorLikelihood"] = ui->cobLSminimizeWhat->currentIndex();
         rootJson["StartStepX"] = ui->ledInitialStepX->text().toDouble();
         rootJson["StartStepY"] = ui->ledInitialStepY->text().toDouble();
@@ -5147,10 +5127,6 @@ bool ReconstructionWindow::readReconSettingsFromJson(QJsonObject &jsonMaster)
   JsonToComboBox(gjson, "Zstrategy", ui->cobZ);
   JsonToCheckbox(gjson, "IncludePassives", ui->cbIncludePassives);
   JsonToCheckbox(gjson, "WeightedChi2", ui->cbWeightedChi2);  
-  ui->cbLimitSearchToVicinity->setChecked(false); //compatibility
-  JsonToCheckbox(gjson, "LimitSearchIfTrueIsSet", ui->cbLimitSearchToVicinity);
-  JsonToLineEditDouble(gjson, "RangeForLimitSearchIfTrueSet", ui->ledLimitSearchRange);  
-  JsonToCheckbox(gjson, "LimitSearchGauss", ui->cbGaussWeightInMinimization);
 
   //Dynamic passives - before algorithms for compatibility: CUDA settings can overrite them if old file is loaded
   if (RecJson.contains("DynamicPassives"))
@@ -5680,6 +5656,16 @@ void ReconstructionWindow::ConfigurePlotXY(int binsX, double X0, double X1, int 
     ui->ledYto->setText(QString::number(Y1));
 }
 
+void ReconstructionWindow::ConfigurePlotXYextra(bool suppress0, bool plotVsTrue, bool showPMs, bool showManifest, bool invertX, bool invertY)
+{
+    ui->cbSuppress0bins->setChecked(suppress0);
+    ui->cbPlotVsActualPosition->setChecked(plotVsTrue);
+    ui->cbShowPMs->setChecked(showPMs);
+    ui->cbShowManifestItems->setChecked(showManifest);
+    ui->cbInvertX->setChecked(invertX);
+    ui->cbInvertY->setChecked(invertY);
+}
+
 void ReconstructionWindow::ReconstructAll(bool fShow)
 {
   MW->fStartedFromGUI = true;
@@ -5687,7 +5673,7 @@ void ReconstructionWindow::ReconstructAll(bool fShow)
   ui->pbStopReconstruction->setEnabled(true);
   qApp->processEvents();
 
-  MW->ReconstructionManager->reconstructAll(MW->Config->JSON, MW->GlobSet->NumThreads, fShow);
+  MW->ReconstructionManager->reconstructAll(MW->Config->JSON, MW->GlobSet.NumThreads, fShow);
   //will generate signal when finished and trigger onReconstructionFinished(bool fSuccess)
 }
 
@@ -6203,7 +6189,7 @@ void ReconstructionWindow::on_pbShowUnassigned_clicked()
    MW->GeometryWindow->show();
    MW->GeometryWindow->raise();
    MW->GeometryWindow->activateWindow();
-   MW->GeometryWindow->ShowTextOnPMs(tmp, kBlack);
+   MW->GeometryWindow->ShowText(tmp, kBlack);
 }
 
 void ReconstructionWindow::on_lwPMgroups_activated(const QModelIndex &index)
@@ -6310,7 +6296,7 @@ void ReconstructionWindow::showSensorGroup(int igroup)
     MW->GeometryWindow->show();
     MW->GeometryWindow->raise();
     MW->GeometryWindow->activateWindow();
-    MW->GeometryWindow->ShowTextOnPMs(tmp, kRed);
+    MW->GeometryWindow->ShowText(tmp, kRed);
 }
 
 void ReconstructionWindow::on_leSpF_LimitToObject_textChanged(const QString &/*arg1*/)
@@ -6497,4 +6483,50 @@ void ReconstructionWindow::on_pbClearAllFilters_clicked()
 void ReconstructionWindow::on_cobCGstartOption_currentIndexChanged(int index)
 {
     ui->fCPUoffsets->setVisible(index == 2);
+}
+
+#include <QPlainTextEdit>
+#include "areconstructionworker.h"
+void ReconstructionWindow::on_pbRootConfigureCustom_clicked()
+{
+    QDialog D;
+    QVBoxLayout * v = new QVBoxLayout(&D);
+
+    QLabel * l = new QLabel("Minimization function will sum contributions for all active PMs");
+    v->addWidget(l);
+    l = new QLabel("Use TFormula from ROOT with the following parameters:\nLRF, Signal, Error, X, Y, Z, Energy");
+    v->addWidget(l);
+    l = new QLabel("For example, for ML minimization use:\n-Signal * Log(LRF) + LRF");
+    v->addWidget(l);
+    QPlainTextEdit * pte = new QPlainTextEdit();
+        pte->appendPlainText(RootMinFormula);
+    v->addWidget(pte);
+    QHBoxLayout * h = new QHBoxLayout();
+        QPushButton * yes = new QPushButton("Accept");
+        connect(yes, &QPushButton::clicked, [this, &D, pte]()
+        {
+            AFunc_TFormula form(0);
+            QString text = pte->document()->toPlainText().simplified();
+            bool bOK = form.parse(text);
+            if (bOK) emit D.accept();
+            else message("Invalid formula!", &D);
+        });
+        h->addWidget(yes);
+        QPushButton * no = new QPushButton("Cancel");
+        connect(no, &QPushButton::clicked, &D, &QDialog::reject);
+        h->addWidget(no);
+    v->addLayout(h);
+
+    int res = D.exec();
+
+    if (res == QDialog::Accepted)
+    {
+        RootMinFormula = pte->document()->toPlainText().simplified();
+        UpdateReconConfig();
+    }
+}
+
+void ReconstructionWindow::on_cobLSminimizeWhat_currentIndexChanged(int index)
+{
+    ui->pbRootConfigureCustom->setVisible(index == 2);
 }

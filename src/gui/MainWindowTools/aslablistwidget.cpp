@@ -1,5 +1,6 @@
 #include "aslablistwidget.h"
-#include "slab.h"
+#include "aslab.h"
+#include "slabdelegate.h"
 #include "asandwich.h"
 #include "arootlineconfigurator.h"
 #include "ageoobject.h"
@@ -457,6 +458,7 @@ void ASlabListWidget::customMenuRequested(const QPoint &pos)
       if (obj && !obj->HostedObjects.isEmpty())
       {
           QMessageBox::information(this, "", "Cannot remove slab which contains objects inside");
+          emit SlabDoubleClicked(obj->Name);
           return;
       }
       else if (obj)

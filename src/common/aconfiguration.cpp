@@ -4,7 +4,7 @@
 #include "alrfmoduleselector.h"
 #include "apmgroupsmanager.h"
 #include "amaterialparticlecolection.h"
-#include "particlesourcesclass.h"
+#include "asourceparticlegenerator.h"
 #include "asandwich.h"
 #include "generalsimsettings.h"
 #include "apmhub.h"
@@ -12,7 +12,7 @@
 #include <QDebug>
 #include <QFile>
 #include <QJsonDocument>
-#include <QApplication>
+#include <QtWidgets/QApplication>
 
 AConfiguration::AConfiguration(QObject *parent) :
   QObject(parent), Detector(0), ParticleSources(0) {}
@@ -40,11 +40,7 @@ bool AConfiguration::LoadConfig(QJsonObject &json, bool DetConstructor, bool Sim
           JSON["DetectorConfig"] = DetJson;
           Detector->BuildDetector(true); //if GUI present, update will trigger automatically //suppress sim gui update, json is stuill old!
         }
-      else
-        {
-          ErrorString = "Json does not contain detector settings!";
-          qWarning() << ErrorString;
-        }
+      else ErrorString = "Json does not contain detector settings!";
     }
 
   //    qDebug() << "Loading simulation config";
@@ -61,11 +57,7 @@ bool AConfiguration::LoadConfig(QJsonObject &json, bool DetConstructor, bool Sim
           emit requestSimulationGuiUpdate();
           emit requestSelectFirstActiveParticleSource();
         }
-      else
-        {
-          ErrorString = "Json does not contain simulation settings!";
-          qWarning() << ErrorString;
-        }
+      else ErrorString = "Json does not contain simulation settings!";
     }
   else
   {
@@ -97,11 +89,7 @@ bool AConfiguration::LoadConfig(QJsonObject &json, bool DetConstructor, bool Sim
           emit requestReconstructionGuiUpdate();
           AskForLRFGuiUpdate();
         }
-      else
-      {
-          ErrorString = "Json does not contain reconstruction settings!";
-          qWarning() << ErrorString;
-      }
+      else ErrorString = "Json does not contain reconstruction settings!";
     }
 
   if (json.contains("GUI"))
@@ -140,9 +128,20 @@ bool AConfiguration::LoadConfig(QJsonObject &json, bool DetConstructor, bool Sim
       }
   }
 
+  bool bRes = true;
+#ifndef __USE_ANTS_NCRYSTAL__
+  if (Detector->MpCollection->isNCrystalInUse())
+  {
+      ErrorString = "Loaded config has material(s) configured for NCrystal library,\nwhich was disabled during ANTS2 compilation";
+      bRes = false;
+  }
+#endif
+
+  if (!ErrorString.isEmpty()) qWarning() << ErrorString;
+
   emit NewConfigLoaded();
   //qDebug() << ">>> Load done";
-  return true;
+  return bRes;
 }
 
 void AConfiguration::SaveConfig(QJsonObject &json, bool DetConstructor, bool SimSettings, bool ReconstrSettings)
@@ -233,7 +232,7 @@ void AConfiguration::UpdateParticlesJson()
   QJsonObject djson = JSON["DetectorConfig"].toObject();
   Detector->MpCollection->writeParticleCollectionToJson(djson);
   JSON["DetectorConfig"] = djson;
-  emit requestDetectorGuiUpdate();
+  //emit requestDetectorGuiUpdate();
 }
 
 void AConfiguration::UpdateSourcesJson(QJsonObject &sourcesJson)
@@ -248,76 +247,6 @@ void AConfiguration::UpdateSourcesJson(QJsonObject &sourcesJson)
     JSON["SimulationConfig"] = sj;
 
     emit requestSimulationGuiUpdate();
-}
-
-void AConfiguration::ClearCustomNodes()
-{
-    QJsonObject sim = JSON["SimulationConfig"].toObject();
-    QJsonObject ps = sim["PointSourcesConfig"].toObject();
-    QJsonObject cn = ps["CustomNodesOptions"].toObject();
-
-    cn["Nodes"] = QJsonArray();
-
-    ps["CustomNodesOptions"] = cn;
-    sim["PointSourcesConfig"] = ps;
-    JSON["SimulationConfig"] = sim;
-
-    emit requestSimulationGuiUpdate();
-}
-
-QJsonArray AConfiguration::GetCustomNodes()
-{
-    QJsonObject sim = JSON["SimulationConfig"].toObject();
-    QJsonObject ps = sim["PointSourcesConfig"].toObject();
-    QJsonObject cn = ps["CustomNodesOptions"].toObject();
-
-    QJsonArray arr = cn["Nodes"].toArray();
-    return arr;
-}
-
-void AConfiguration::AddCustomNode(double x, double y, double z)
-{
-    QJsonObject sim = JSON["SimulationConfig"].toObject();
-    QJsonObject ps = sim["PointSourcesConfig"].toObject();
-    QJsonObject cn = ps["CustomNodesOptions"].toObject();
-    QJsonArray arr = cn["Nodes"].toArray();
-
-    QJsonArray el;
-    el << x << y << z;
-    arr.append(el);
-
-    cn["Nodes"] = arr;
-    ps["CustomNodesOptions"] = cn;
-    sim["PointSourcesConfig"] = ps;
-    JSON["SimulationConfig"] = sim;
-
-    emit requestSimulationGuiUpdate();
-}
-
-bool AConfiguration::SetCustomNodes(QJsonArray arr)
-{
-    for (int i=0; i<arr.size(); i++)
-    {
-        if (!arr.at(i).isArray()) return false;
-        QJsonArray a = arr.at(i).toArray();
-        if (a.size()!=3) return false;
-        if (!a.at(0).isDouble()) return false;
-        if (!a.at(1).isDouble()) return false;
-        if (!a.at(2).isDouble()) return false;
-    }
-
-    QJsonObject sim = JSON["SimulationConfig"].toObject();
-    QJsonObject ps = sim["PointSourcesConfig"].toObject();
-    QJsonObject cn = ps["CustomNodesOptions"].toObject();
-
-    cn["Nodes"] = arr;
-
-    ps["CustomNodesOptions"] = cn;
-    sim["PointSourcesConfig"] = ps;
-    JSON["SimulationConfig"] = sim;
-
-    emit requestSimulationGuiUpdate();
-    return true;
 }
 
 void AConfiguration::AskForAllGuiUpdate()
@@ -371,8 +300,8 @@ const QString AConfiguration::RemoveParticle(int particleId)
   Detector->MpCollection->IsParticleInUse(particleId, bInUse, s);
   if (bInUse) return "This particle is a secondary particle defined in neutron capture.\nIt appears in the following material(s):\n"+s;
 
-  ParticleSources->IsParticleInUse(particleId, bInUse, s);
-  if (bInUse) return "This particle is in use by the particle source(s):\n" + s;
+  if ( ParticleSources->IsParticleInUse(particleId, s) )
+      return "This particle is in use by the particle source(s):\n" + s;
 
   Detector->Sandwich->IsParticleInUse(particleId, bInUse, s);
   if (bInUse) return "This particle is currently in use by the monitor(s):\n" + s;
@@ -395,7 +324,6 @@ const QString AConfiguration::RemoveParticle(int particleId)
   //updating gui if present
   emit requestDetectorGuiUpdate();
   emit requestSimulationGuiUpdate();
-  emit RequestClearParticleStack(); //clear defined ParticleStack in GUI
 
   return "";
 }
@@ -409,6 +337,6 @@ void AConfiguration::UpdateSimSettingsOfDetector()
         GeneralSimSettings simSettings;
         simSettings.readFromJson(SimJson);
         Detector->PMs->configure(&simSettings); //wave, angle properties + rebin, prepare crosstalk
-        Detector->MpCollection->UpdateWavelengthBinning(&simSettings);
+        Detector->MpCollection->UpdateRuntimePropertiesAndWavelengthBinning(&simSettings, Detector->RandGen);
     }
 }

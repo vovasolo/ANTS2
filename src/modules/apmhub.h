@@ -23,6 +23,8 @@ public:
 
     void configure(GeneralSimSettings* SimSet); // must do before simulation
 
+    const QString checkBeforeSimulation() const; //returns error - empty if all is OK
+
     // top level json save/load
     void writePMtypesToJson(QJsonObject &json);
     bool readPMtypesFromJson(QJsonObject &json);
@@ -95,6 +97,10 @@ public:
     void   writePDEwaveToJson(QJsonObject &json);
     bool   readPDEwaveFromJson(QJsonObject &json);
     void   setPDEwave(int ipm, QVector<double>* x, QVector<double>* y);
+    bool   isAllPDEfactorsUnity() const;
+    bool   isAllPDEfactorsSame(double & value) const;
+    bool   isAllSPEfactorsUnity() const;
+    bool   isAllSPEfactorsSame(double & value) const;
 
     //Angular response
     bool   isAngularOverriden(int ipm) const;
@@ -127,8 +133,6 @@ public:
     void updateTypeArea(int typ, QVector<QVector <double> > *vec, double xStep, double yStep);
     void clearTypeArea(int typ);
 
-    void CalculateElChannelsStrength();
-
     void setDoPHS(bool flag) {fDoPHS = flag;}
     void setDoMCcrosstalk(bool flag) {fDoMCcrosstalk = flag;}
     void setDoElNoise(bool flag) {fDoElNoise = flag;}
@@ -152,9 +156,9 @@ public:
     bool fDoDarkCounts = false;
 
 private:
-    TRandom2* RandGen;
+    TRandom2* RandGen;  //used only for tests from GUI
     AMaterialParticleCollection* MaterialCollection;
-    AGammaRandomGenerator* GammaRandomGen;
+    AGammaRandomGenerator* GammaRandomGen;  //used only for GUI!
 
     int numPMs = 0;
     QVector<APm> PMs;

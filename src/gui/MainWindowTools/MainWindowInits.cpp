@@ -18,10 +18,11 @@
 #include "CorrelationFilters.h"
 #include "amaterialparticlecolection.h"
 #include "detectorclass.h"
-#include "simulationmanager.h"
+#include "asimulationmanager.h"
 #include "areconstructionmanager.h"
-#include "particlesourcesclass.h"
-#include "globalsettingsclass.h"
+#include "afileparticlegenerator.h"
+#include "ascriptparticlegenerator.h"
+#include "aglobalsettings.h"
 #include "globalsettingswindowclass.h"
 #include "aconfiguration.h"
 #include "amessage.h"
@@ -29,6 +30,8 @@
 #include "gui/alrfwindow.h"
 #include "anetworkmodule.h"
 #include "awebsocketserverdialog.h"
+#include "aremotewindow.h"
+#include "aisotopeabundancehandler.h"
 
 #ifdef ANTS_FANN
 #include "neuralnetworksmodule.h"
@@ -49,11 +52,10 @@ MainWindow::MainWindow(DetectorClass *Detector,
                        ASimulationManager *SimulationManager,
                        AReconstructionManager *ReconstructionManager,
                        ANetworkModule* Net,
-                       TmpObjHubClass *TmpHub,
-                       GlobalSettingsClass *GlobSet) :
-    QMainWindow(), Detector(Detector), EventsDataHub(EventsDataHub), RootApp(RootApp),
+                       TmpObjHubClass *TmpHub) :
+    AGuiWindow(nullptr), Detector(Detector), EventsDataHub(EventsDataHub), RootApp(RootApp),
     SimulationManager(SimulationManager), ReconstructionManager(ReconstructionManager),
-    NetModule(Net), TmpHub(TmpHub), GlobSet(GlobSet),
+    NetModule(Net), TmpHub(TmpHub), GlobSet(AGlobalSettings::getInstance()),
     ui(new Ui::MainWindow)
 {
     qDebug() << ">Main window constructor started";
@@ -74,13 +76,21 @@ MainWindow::MainWindow(DetectorClass *Detector,
     QString mav = QString::number(majVer);
     setWindowTitle("ANTS2_v"+mav+"."+miv);
 
+    QString epff = GlobSet.ExamplesDir + "/ExampleParticlesFromFile.dat";
+    SimulationManager->FileParticleGenerator->SetFileName(epff);
+    updateFileParticleGeneratorGui();
+
+    QString SPGtext = "gen.AddParticle(0, 120,    math.gauss(0, 25),  math.gauss(0, 25), -20,   0,0,1)\n"
+                      "if (math.random() < 0.1)\n"
+                      "      gen.AddParticle(0, 120,    math.gauss(0, 25),  math.gauss(0, 25), -20,   0,0,1)";
+    SimulationManager->ScriptParticleGenerator->SetScript(SPGtext);
+    QObject::connect(ui->pbStopScan, &QPushButton::clicked, SimulationManager->ScriptParticleGenerator, &AScriptParticleGenerator::abort);//[pg](){pg->abort();});
+    updateScriptParticleGeneratorGui();
+
     //adding Context menus
     ui->lwLoadedEventsFiles->setContextMenuPolicy(Qt::CustomContextMenu);
     QObject::connect(ui->lwLoadedEventsFiles, SIGNAL(customContextMenuRequested(const QPoint&)),
         this, SLOT(LoadEventsListContextMenu(const QPoint&)));
-
-    //setting up alias for particle sources container class - just for GUI
-    ParticleSources = SimulationManager->ParticleSources;
 
     //interface windows
     qDebug()<<">Creating Examples Window";
@@ -141,7 +151,25 @@ MainWindow::MainWindow(DetectorClass *Detector,
     qDebug()<<">Creating Python script window";
     createPythonScriptWindow();
 #endif
+    qDebug()<<">Creating remote simulation/reconstruction window";
+    RemoteWindow = new ARemoteWindow(this);
     ServerDialog = new AWebSocketServerDialog(this);
+
+    qDebug() << ">Registering windows with window navigator";
+    //main window does not need registration
+    ELwindow->connectToNavigator(WindowNavigator, "examples");
+    Rwindow->connectToNavigator(WindowNavigator, "recon");
+    Owindow->connectToNavigator(WindowNavigator, "out");
+    DAwindow->connectToNavigator(WindowNavigator, "");
+    GeometryWindow->connectToNavigator(WindowNavigator, "geometry");
+    GraphWindow->connectToNavigator(WindowNavigator, "graph");
+    lrfwindow->connectToNavigator(WindowNavigator, "lrf");
+    MIwindow->connectToNavigator(WindowNavigator, "mat");
+    //ScriptWindow and PythonScriptWindow are already processed
+    WindowNavigator->connectToNavigator(WindowNavigator, ""); //paranoic
+    RemoteWindow->connectToNavigator(WindowNavigator, "");
+    newLrfWindow->connectToNavigator(WindowNavigator, "newLrf");
+
     qDebug()<<">All windows created";
 
     //root update cycle
@@ -157,14 +185,15 @@ MainWindow::MainWindow(DetectorClass *Detector,
     QObject::connect(Config, SIGNAL(requestSelectFirstActiveParticleSource()), this, SLOT(selectFirstActiveParticleSource()));
     QObject::connect(Config, SIGNAL(requestReconstructionGuiUpdate()), Rwindow, SLOT(onRequestReconstructionGuiUpdate()));
     QObject::connect(Config, SIGNAL(requestLRFGuiUpdate()), lrfwindow, SLOT(onRequestGuiUpdate()));
-    QObject::connect(Config, SIGNAL(NewConfigLoaded()), this, SLOT(onNewConfigLoaded()));
+    QObject::connect(Config, &AConfiguration::NewConfigLoaded, this, &MainWindow::onNewConfigLoaded);
     QObject::connect(Config, &AConfiguration::requestGuiBusyStatusChange, WindowNavigator, &WindowNavigatorClass::ChangeGuiBusyStatus);
+    QObject::connect(MpCollection, &AMaterialParticleCollection::ParticleCollectionChanged, this, &MainWindow::updateFileParticleGeneratorGui);
 
     QObject::connect(EventsDataHub, SIGNAL(loaded(int, int)), this, SLOT(updateLoaded(int, int)));
     QObject::connect(this, SIGNAL(RequestStopLoad()), EventsDataHub, SLOT(onRequestStopLoad()));
     QObject::connect(EventsDataHub, SIGNAL(requestClearKNNfilter()), ReconstructionManager, SLOT(onRequestClearKNNfilter()));
     QObject::connect(EventsDataHub, &EventsDataClass::cleared, this, &MainWindow::onRequestUpdateGuiForClearData);
-    QObject::connect(EventsDataHub, SIGNAL(requestEventsGuiUpdate()), Rwindow, SLOT(onRequestEventsGuiUpdate())); 
+    QObject::connect(EventsDataHub, &EventsDataClass::requestEventsGuiUpdate, Rwindow, &ReconstructionWindow::onRequestEventsGuiUpdate);
 
     QObject::connect(ReconstructionManager, SIGNAL(ReconstructionFinished(bool, bool)), Rwindow, SLOT(onReconstructionFinished(bool, bool)));
     QObject::connect(ReconstructionManager, SIGNAL(RequestShowStatistics()), Rwindow, SLOT(ShowStatistics()));
@@ -172,23 +201,30 @@ MainWindow::MainWindow(DetectorClass *Detector,
 
     QObject::connect(Rwindow, SIGNAL(StopRequested()), ReconstructionManager, SLOT(requestStop()));
 
-    QObject::connect(Config, &AConfiguration::RequestClearParticleStack, this, &MainWindow::on_pbClearAllStack_clicked);
-
 #ifdef ANTS_FANN
     QObject::connect(ReconstructionManager->ANNmodule,SIGNAL(status(QString)),NNwindow,SLOT(status(QString)));
     QObject::connect(NNwindow,SIGNAL(train_stop()),ReconstructionManager->ANNmodule,SLOT(train_stop()));
 #endif
 
     //Busy status updates
-    QObject::connect(WindowNavigator, SIGNAL(BusyStatusChanged(bool)), newLrfWindow, SLOT(onBusyStatusChanged(bool)));
+    QObject::connect(WindowNavigator, &WindowNavigatorClass::BusyStatusChanged, newLrfWindow, &ALrfWindow::onBusyStatusChanged);
 
-    QObject::connect(SimulationManager->Runner, SIGNAL(updateReady(int, double)), this, SLOT(RefreshPhotSimOnTimer(int, double))); //Simulation interface refresh/update stuff
-    QObject::connect(SimulationManager, SIGNAL(SimulationFinished()), this, SLOT(simulationFinished())); //Simulation finished
+    QObject::connect(SimulationManager, &ASimulationManager::updateReady, this, &MainWindow::RefreshOnProgressReport);
+    QObject::connect(SimulationManager, &ASimulationManager::SimulationFinished, this, &MainWindow::simulationFinished);
+
+    QObject::connect(this, &MainWindow::RequestUpdateSimConfig, this, &MainWindow::on_pbUpdateSimConfig_clicked, Qt::QueuedConnection);
+
+    //have to be queued - otherwise report current index before click
+    QObject::connect(ui->twSourcePhotonsParticles, &QTabWidget::tabBarClicked, this, &MainWindow::on_pbUpdateSimConfig_clicked, Qt::QueuedConnection);
+    QObject::connect(ui->twParticleGenerationMode, &QTabWidget::tabBarClicked, this, &MainWindow::on_pbUpdateSimConfig_clicked, Qt::QueuedConnection);
+    QObject::connect(ui->twSingleScan, &QTabWidget::tabBarClicked, this, &MainWindow::on_pbUpdateSimConfig_clicked, Qt::QueuedConnection);
 
     DoNotUpdateGeometry = false; //control
 
+    qDebug() << ">Intitializing slab gui...";
+    initDetectorSandwich(); //create detector sandwich control and link GUI signals/slots
     qDebug()<<">Loading default detector...";
-    bool fLoadedDefaultDetector = MainWindow::startupDetector();
+    bool fLoadedDefaultDetector = startupDetector();
     qDebug()<<">Default detector configured";
 
     //Environment
@@ -228,42 +264,63 @@ MainWindow::MainWindow(DetectorClass *Detector,
     ui->labReloadRequired->setPixmap(Rwindow->RedIcon.pixmap(16,16));
     ui->labAdvancedOn->setPixmap(Rwindow->YellowIcon.pixmap(16,16));
     ui->labAdvancedOn->setVisible(false);
+    ui->labIgnoreNoHitEvents->setPixmap(Rwindow->YellowIcon.pixmap(16,16));
+    ui->labIgnoreNoHitEvents->setVisible(false);
+    ui->labIgnoreNoDepoEvents->setPixmap(Rwindow->YellowIcon.pixmap(16,16));
+    ui->labIgnoreNoDepoEvents->setVisible(false);
+    ui->labPhTracksOn->setPixmap(Rwindow->YellowIcon.pixmap(8,8));
+    ui->labPhTracksOn->setVisible(false);
+    ui->labPhTracksOn_1->setPixmap(Rwindow->YellowIcon.pixmap(8,8));
+    ui->labPhTracksOn_1->setVisible(false);
+    ui->labPartTracksOn->setPixmap(Rwindow->YellowIcon.pixmap(8,8));
+    ui->labPartTracksOn->setVisible(false);
+    ui->labPDEfactors_notAllUnity->setPixmap(Rwindow->YellowIcon.pixmap(16,16));
+    ui->labSPEfactors_ActiveAndNotAllUnity->setPixmap(Rwindow->YellowIcon.pixmap(16,16));
+    ui->labSPEfactorNotUnity->setPixmap(Rwindow->YellowIcon.pixmap(16,16));
+    ui->labPartLogOn->setPixmap(Rwindow->YellowIcon.pixmap(8,8));
+    ui->labPartLogOn->setVisible(false);
+
       //misc gui inits
     ui->swPMTvsSiPM->setCurrentIndex(ui->cobPMdeviceType->currentIndex());
     MainWindow::on_pbRefreshPMproperties_clicked(); //indication of PM properties
     ui->tabWidget->setCurrentIndex(0);
     MainWindow::on_pbElUpdateIndication_clicked();
     ui->twSourcePhotonsParticles->setCurrentIndex(0);
-    MainWindow::PointSource_InitTabWidget();
     QList<QWidget*> invis;
-    invis << ui->pbRefreshParticles << ui->pbOverride << ui->pbRefreshOverrides << ui->pbUpdatePreprocessingSettings
-     << ui->pbRefreshStack << ui->pbShowPMsArrayRegularData << ui->pbRefreshPMArrayData << ui->pbUpdateElectronics
+    invis << ui->pbRefreshParticles << ui->pbRefreshOverrides << ui->pbUpdatePreprocessingSettings
+     << ui->pbShowPMsArrayRegularData << ui->pbRefreshPMArrayData << ui->pbUpdateElectronics
      << ui->pbRefreshPMproperties << ui->pbUpdatePMproperties << ui->pbRefreshMaterials << ui->pbStopLoad
-     << ui->pbGunRefreshparticles << ui->pbIndPMshowInfo << ui->pbUpdateToFixedZ << ui->pbUpdateSimConfig
-     << ui->pbUpdateToFullCustom << ui->pbElUpdateIndication << ui->pbUnlockGui
-     << ui->pbInitializeScanFloodNoise << ui->pbUpdateScanFloodTabWidget << ui->fScanFloodTotProb
-     << ui->fSecondaryScintLoadProfile << ui->pbUpdateSources << ui->pbUpdateSourcesIndication
-     << ui->fLinkedParticle << ui->sbPMtype << ui->fUpperLowerArrays << ui->sbPMtypeForGroup
-     << ui->pbRebuildDetector << ui->fReloadRequired << ui->pbYellow << ui->pbGDML << ui->fGunMultipleEvents;
+     << ui->pbIndPMshowInfo << ui->pbUpdateToFixedZ << ui->pbUpdateSimConfig
+     << ui->pbUpdateToFullCustom << ui->pbElUpdateIndication << ui->pbUnlockGui << ui->fScanFloodTotProb
+     << ui->fSecondaryScintLoadProfile << ui->pbUpdateSourcesIndication
+     << ui->sbPMtype << ui->fUpperLowerArrays << ui->sbPMtypeForGroup
+     << ui->pbRebuildDetector << ui->fReloadRequired << ui->pbYellow << ui->pbGDML << ui->fGunMultipleEvents
+     << ui->labPDEfactors_notAllUnity << ui->labSPEfactors_ActiveAndNotAllUnity << ui->pbGainsUpdateGUI;
     for (int i=0;i<invis.length();i++) invis[i]->setVisible(false);
-    ui->frLimitNodesTo->setVisible( ui->twSingleScan->currentIndex()!=0 );
     QList<QWidget*> disables;
-    disables << ui->fGunParticle << ui->fFixedDir << ui->fFixedWorldSize;
+    disables << ui->fFixedDir << ui->fFixedWorldSize;
     for (int i=0;i<disables.length();i++) disables[i]->setEnabled(false);
     ui->fWaveOptions->setEnabled(ui->cbWaveResolved->isChecked());
     ui->fWaveTests->setEnabled(ui->cbWaveResolved->isChecked());
     ui->fTime->setEnabled(ui->cbTimeResolved->isChecked());
-    ui->fPointSource_Wave->setEnabled(ui->cbWaveResolved->isChecked());
-    ui->fPointSource_Time->setEnabled(ui->cbTimeResolved->isChecked());
-    ui->swPointSourceWaveTime->setCurrentIndex(ui->cobDirectlyOrFromMaterial->currentIndex());
+    ui->cbFixWavelengthPointSource->setEnabled(ui->cbWaveResolved->isChecked());
     ui->fAngular->setEnabled(ui->cbAngularSensitive->isChecked());    
     ui->fScanSecond->setEnabled(ui->cbSecondAxis->isChecked());
     ui->fScanThird->setEnabled(ui->cbThirdAxis->isChecked());
-    ui->fPreprocessing->setEnabled(ui->cbPMsignalPreProcessing->isChecked());    
+    ui->fPreprocessing->setEnabled(ui->cbPMsignalPreProcessing->isChecked());
+    QStringList slParts;
+    slParts << "gamma" << "neutron" << "e-" << "e+" << "proton" << "custom_particle";
+    ui->cobAddNewParticle->addItems(slParts);
+    const AIsotopeAbundanceHandler & IsoAbHandler = AGlobalSettings::getInstance().getIsotopeAbundanceHandler();
+    QStringList slIons =  IsoAbHandler.getListOfElements();
+    ui->cobAddIon->addItems(slIons);
+    ui->cobAddIon->setMaxVisibleItems(10);
+    ui->cobAddIon->setCurrentText("He");
+    ui->cobPDE->setCurrentIndex(1); ui->cobSPE->setCurrentIndex(1);
     qDebug() << ">GUI initialized";
 
     //change font size for all windows
-    if (this->font().pointSize() != GlobSet->FontSize) setFontSizeAllWindows(GlobSet->FontSize);
+    if (this->font().pointSize() != GlobSet.FontSize) setFontSizeAllWindows(GlobSet.FontSize);
     qDebug() << ">Font size adjusted";
 
     //menu properties
@@ -274,7 +331,7 @@ MainWindow::MainWindow(DetectorClass *Detector,
     ui->menuFile->setToolTipDuration(1000);
 
     bool fShowGeom;
-    if (GlobSet->SaveLoadWindows)
+    if (GlobSet.SaveLoadWindows)
     {
       MainWindow::on_actionLoad_positions_and_status_of_all_windows_triggered();
       fShowGeom = GeometryWindow->isVisible();
@@ -283,9 +340,9 @@ MainWindow::MainWindow(DetectorClass *Detector,
     {
         WindowNavigator->show();
         fShowGeom = true;
-        AssureWidgetIsWithingVisibleArea(this);
+        GuiUtils::AssureWidgetIsWithinVisibleArea(this);
     }
-    ui->actionSave_Load_windows_status_on_Exit_Init->setChecked(GlobSet->SaveLoadWindows);
+    ui->actionSave_Load_windows_status_on_Exit_Init->setChecked(GlobSet.SaveLoadWindows);
 
     qDebug() << ">Init for Output window";
     Owindow->InitWindow();
@@ -295,16 +352,16 @@ MainWindow::MainWindow(DetectorClass *Detector,
     qDebug() << ">Init for Reconstruction window...";
     Rwindow->InitWindow();
 
+    qDebug() << ">Init for Remote sim/reconstruction window...";
+    RemoteWindow->ReadConfig();
+
     qDebug()<<">Showing geometry";
     GeometryWindow->show();
     GeometryWindow->resize(GeometryWindow->width()+1, GeometryWindow->height());
     GeometryWindow->resize(GeometryWindow->width()-1, GeometryWindow->height());
-    QThread::msleep(50);
     GeometryWindow->ShowGeometry(false);
     if (!fShowGeom) GeometryWindow->hide();
 
-    ui->cobScatteringModel->setCurrentIndex(1); //default to Lambertian back
-    //MainWindow::on_pbRefreshOverrides_clicked();  //already in load detector
     MainWindow::updateCOBsWithPMtypeNames();
 
     if (!fLoadedDefaultDetector)

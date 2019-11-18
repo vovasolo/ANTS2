@@ -1,19 +1,22 @@
 #include "PythonQt.h"
-#include "PythonQt_QtAll.h"
+//#include "PythonQt_QtAll.h"
 
 #include "apythonscriptmanager.h"
-#include "coreinterfaces.h"
+#include "ascriptinterface.h"
+#include "amath_si.h"
+#include "acore_si.h"
 
 APythonScriptManager::APythonScriptManager(TRandom2 *RandGen) :
   AScriptManager(RandGen)
 {
   PythonQt::init(PythonQt::RedirectStdOut);
-  PythonQt_QtAll::init();
+  //PythonQt_QtAll::init();
 
   connect(PythonQt::self(), SIGNAL(pythonStdOut(const QString&)), this, SLOT(stdOut(const QString&)));
   connect(PythonQt::self(), SIGNAL(pythonStdErr(const QString&)), this, SLOT(stdErr(const QString&)));
 }
 
+/*
 void APythonScriptManager::SetInterfaceObject(QObject *interfaceObject, QString name)
 {
   //qDebug() << "Registering:" << interfaceObject << name;
@@ -45,7 +48,35 @@ void APythonScriptManager::SetInterfaceObject(QObject *interfaceObject, QString 
       if (index != -1)
           QObject::connect(interfaceObject, "2AbortScriptEvaluation(QString)", this, SLOT(AbortEvaluation(QString)));  //1-slot, 2-signal
     }
+}
+*/
 
+void APythonScriptManager::RegisterInterfaceAsGlobal(AScriptInterface *)
+{
+    qDebug() << "Registering as global is not implemented for python scripting!";
+}
+
+void APythonScriptManager::RegisterCoreInterfaces(bool bCore, bool bMath)
+{
+    if (bCore)
+    {
+        ACore_SI* coreObj = new ACore_SI(this);
+        RegisterInterface(coreObj, "core");
+    }
+
+    if (bMath)
+    {
+        AMath_SI* mathObj = new AMath_SI(RandGen);
+        RegisterInterface(mathObj, "MATH");
+    }
+}
+
+void APythonScriptManager::RegisterInterface(AScriptInterface *interface, const QString &name)
+{
+    PythonQt::self()->addObject(PythonQt::self()->getMainModule(), name, interface);
+    interface->setObjectName(name);
+    interfaces.append(interface);
+    QObject::connect(interface, &AScriptInterface::AbortScriptEvaluation, this, &APythonScriptManager::AbortEvaluation);
 }
 
 QString APythonScriptManager::Evaluate(const QString &Script)

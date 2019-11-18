@@ -1,27 +1,25 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-#include "scanfloodstructure.h"
+#include "aguiwindow.h"
+#include "ag4simulationsettings.h"
 
 #include <QMainWindow>
 #include <QVector>
 #include <QThread>
 #include <QTimer>
+#include <QJsonObject>
 
 // forward declarations
 class AConfiguration;
-struct AEnergyDepositionCell;
+class AGlobalSettings;
 class GeoMarkerClass;
-class AParticleOnStack;
 class AMaterialParticleCollection;
 class EventsDataClass;
-class GeneralSimSettings;
 class GeometryWindowClass;
 class GraphWindowClass;
-class RasterWindow;
 class LRFwindow;
 class ReconstructionWindow;
-class SensorLRFs;
 class ExamplesWindow;
 class CheckUpWindowClass;
 class DetectorAddOnsWindow;
@@ -32,21 +30,15 @@ class OutputWindow;
 class QComboBox;
 class TH1D;
 class TH1I;
-class ParticleSourcesClass;
 class WindowNavigatorClass;
-class GeometryWindowAddOn;
-class GlobalSettingsClass;
 class GlobalSettingsWindowClass;
 class GainEvaluatorWindowClass;
 class TApplication;
 class Viewer2DarrayObject;
 class DetectorClass;
-class ASimulatorRunner;
-class ParticleSourceSimulator;
 class TmpObjHubClass;
 class ASlabListWidget;
 class InterfaceToPMscript;
-class InterfaceToNodesScript;
 class QMessageBox;
 class QListWidgetItem;
 class QFile;
@@ -54,8 +46,10 @@ class ASimulationManager;
 class AScriptWindow;
 class ALrfWindow;
 class ANetworkModule;
-struct ParticleSourceStructure;
+struct AParticleSourceRecord;
+class ARemoteWindow;
 class AWebSocketServerDialog;
+class AParticleGun;
 
 #ifdef ANTS_FANN
 class NeuralNetworksWindow;
@@ -66,7 +60,7 @@ namespace Ui {
 class MainWindow;
 }
 
-class MainWindow : public QMainWindow
+class MainWindow : public AGuiWindow
 {
     Q_OBJECT
     
@@ -77,8 +71,7 @@ public:
                ASimulationManager *SimulationManager,
                AReconstructionManager *ReconstructionManager,
                ANetworkModule *Net,
-               TmpObjHubClass *TmpHub,
-               GlobalSettingsClass *GlobSet);
+               TmpObjHubClass *TmpHub);
     ~MainWindow();
 
     // Pointers to external resources
@@ -89,11 +82,10 @@ public:
     EventsDataClass *EventsDataHub = 0;
     TApplication *RootApp = 0;
     ASimulationManager* SimulationManager = 0;
-    ParticleSourcesClass* ParticleSources = 0;
     AReconstructionManager *ReconstructionManager = 0;
     ANetworkModule* NetModule = 0;
     TmpObjHubClass *TmpHub = 0;
-    GlobalSettingsClass* GlobSet = 0;
+    AGlobalSettings& GlobSet;
 
     // ANTS2 windows
     GraphWindowClass *GraphWindow = 0;
@@ -112,6 +104,7 @@ public:
     AScriptWindow* ScriptWindow = 0;                //global script window
     ALrfWindow* newLrfWindow = 0;                   //window of the v3 LRF module
     AScriptWindow* PythonScriptWindow = 0;
+    ARemoteWindow* RemoteWindow = 0;
     AWebSocketServerDialog* ServerDialog = 0;
 
 #ifdef ANTS_FANN
@@ -122,15 +115,9 @@ public:
     ASlabListWidget* lw = 0;
 
     //local data, just for GUI
-    QVector<AEnergyDepositionCell*> EnergyVector;
     QVector<GeoMarkerClass*> GeoMarkers;
-    QVector<AParticleOnStack*> ParticleStack;
 
     InterfaceToPMscript* PMscriptInterface = 0;       // if created -> managed by the script manager
-
-    QVector<QVector3D*> CustomScanNodes;
-    InterfaceToNodesScript* NodesScriptInterface = 0; // if created -> managed by the script manager
-    QString NodesScript;
 
     //critical - updates
     void NumberOfPMsHaveChanged();
@@ -143,7 +130,7 @@ public:
     void startRootUpdate();  // starts timer which in regular intervals process Root events
     void stopRootUpdate();   // stops timer which in regular intervals process Root events
 
-    void ClearData(); //clear status, disconnect reconstruction
+    void ClearData(bool bKeepEnergyVector = false); //clear status, disconnect reconstruction
 
     //detector constructor
     void ReconstructDetector(bool fKeepData = false);
@@ -155,23 +142,16 @@ public:
 
     void UpdateTestWavelengthProperties(); //if material properties were updated, need to update indication in the Test tab
 
-    void ShowTracks();
-
     void writeDetectorToJson(QJsonObject &json); //GDML is NOT here
     bool readDetectorFromJson(QJsonObject &json);
-    void writeSimSettingsToJson(QJsonObject &json, bool fVerbose = false);  //true - save point and source settings
+    void writeSimSettingsToJson(QJsonObject &json);
     bool readSimSettingsFromJson(QJsonObject &json);
 
     //save data to file - public due to batch mode usage
     int LoadSimulationDataFromTree(QString fileName, int maxEvents = -1);
     int LoadPMsignals(QString fileName);
-    //
-    void ExportDeposition(QFile &outputFile);
-    void ImportDeposition(QFile &file);
 
     //configuration from outside
-    void setShowTop(bool flag) {ShowTop = flag;}
-    void setColorByMaterial(bool flag) {ColorByMaterial = flag;}
     void SetProgress(int val);
 
     //gains and ch per ph.el
@@ -181,16 +161,12 @@ public:
 
     //public flags
     bool DoNotUpdateGeometry;  //if GUI is in bulk-update, we do not detector geometry be updated on each line
-    bool GeometryDrawDisabled = false; //no drawing of th geometry or tracks
+    bool GeometryDrawDisabled = false; //no drawing of the geometry or tracks
     bool fStartedFromGUI = false;          //flag indicating that an action was run from GUI, e.g. simulation
-    bool ShowTop = false;
-    bool ColorByMaterial = false;
 
     bool isWavelengthResolved() const;
     double WaveFrom, WaveTo, WaveStep;
     int WaveNodes;
-
-    QVector<QString> NoiseTypeDescriptions;
 
     TH1D *histSecScint = 0;
 
@@ -207,9 +183,6 @@ public:
 
     void ShowGeoMarkers(); //Show dots on ALREADY PREPARED geometry window!
 
-    //handling of material COBs
-    void AddMaterialToCOBs(QString s);
-
     void CheckPresenseOfSecScintillator();
     void DeleteLoadedEvents(bool KeepFileList = false);       
     void SavePreprocessingAddMulti(QString fileName);
@@ -219,31 +192,23 @@ public slots:
     void LoadEventsListContextMenu(const QPoint &pos);
     void LRF_ModuleReadySlot(bool ready);
     void on_pbSimulate_clicked();
-    void on_pbTrackStack_clicked();
-    void on_pbGenerateLight_clicked();
     void on_pbParticleSourcesSimulate_clicked();    
-    void RefreshPhotSimOnTimer(int Progress, double msPerEv);
+    void RefreshOnProgressReport(int Progress, double msPerEv);
     void PMscriptSuccess();
-    void NodesScriptSuccess();
     void onGDMLstatusChage(bool fGDMLactivated);
     void updateLoaded(int events, int progress);
     void on_pbSingleSourceShow_clicked();
-    void on_pbClearAllStack_clicked();
-    void on_pbRefreshStack_clicked();
     void ShowGeometrySlot();
 
 private slots:
-    void on_pbAddParticleToStack_clicked();
-    void on_pbRemoveFromStack_clicked();
+    void updateFileParticleGeneratorGui();
+    void updateScriptParticleGeneratorGui();
+
     void on_pbRefreshMaterials_clicked();
     void on_cbXbyYarray_stateChanged(int arg1);
     void on_cbRingsArray_stateChanged(int arg1);
     void on_pbRefreshOverrides_clicked();
-    void on_pbOverride_clicked();
     void on_pbStartMaterialInspector_clicked();
-    void on_pbAddparticleToActive_clicked();
-    void on_cobParticleToInspect_currentIndexChanged(int index);
-    void on_leParticleName_editingFinished();
     void on_pbRefreshParticles_clicked();
     void on_cbSecondAxis_toggled(bool checked);
     void on_cbThirdAxis_toggled(bool checked);
@@ -279,8 +244,7 @@ private slots:
     void on_pbTestGeneratorSecondary_clicked();
     void on_pbTestShowRefrIndex_clicked();
     void on_pbTestShowAbs_clicked();
-    void on_pbShowThisMatInfo_clicked();
-    void on_sbWaveIndexPointSource_valueChanged(int arg1);
+    void on_sbFixedWaveIndexPointSource_valueChanged(int arg1);
     void on_pbShowPDE_clicked();
     void on_pbLoadPDE_clicked();
     void on_pbDeletePDE_clicked();
@@ -289,17 +253,7 @@ private slots:
     void on_pbPMtypeShowAngular_clicked();
     void on_pbPMtypeDeleteAngular_clicked();
     void on_pbPMtypeShowEffectiveAngular_clicked();
-    void on_cobGunSourceType_currentIndexChanged(int index);    
     void on_pbGunTest_clicked();
-    void on_pbGunRefreshparticles_clicked();
-    void on_pbGunAddNew_clicked();
-    void on_pbGunRemove_clicked();
-    void on_cobGunParticle_activated(int index);
-    void on_ledGunEnergy_editingFinished();
-    void on_ledGunParticleWeight_editingFinished();
-    void on_pbGunLoadSpectrum_clicked();
-    void on_pbGunShowSpectrum_clicked();
-    void on_pbGunDeleteSpectrum_clicked();
     void on_ledGunAverageNumPartperEvent_editingFinished();
     void on_ledMediumRefrIndex_editingFinished();
     void on_pbPMtypeLoadArea_clicked();
@@ -313,20 +267,11 @@ private slots:
     void on_pbUpdateToFixedZ_clicked();
     void on_pbIndPmRemove_clicked();
     void on_pbIndShowType_clicked();
-    void on_ledIndEffectiveDE_editingFinished();
-    void on_pbIndRestoreEffectiveDE_clicked();
     void on_pbIndShowDE_clicked();
-    void on_pbIndRestoreDE_clicked();
-    void on_pbIndLoadDE_clicked();
     void on_pbIndShowDEbinned_clicked();
     void on_pbAddPM_clicked();
-    void on_pbIndLoadAngular_clicked();
-    void on_pbIndRestoreAngular_clicked();
     void on_pbIndShowAngular_clicked();
     void on_pbIndShowEffectiveAngular_clicked();
-    void on_ledIndMediumRefrIndex_editingFinished();
-    void on_pbIndLoadArea_clicked();
-    void on_pbIndRestoreArea_clicked();
     void on_pbIndShowArea_clicked();
     void on_cbGunAllowMultipleEvents_toggled(bool checked);
     void LoadPMsignalsRequested();
@@ -348,9 +293,6 @@ private slots:
     void on_pbScanDistrLoad_clicked();
     void on_pbScanDistrShow_clicked();
     void on_pbScanDistrDelete_clicked();
-    void on_pbUpdateScanFloodTabWidget_clicked();
-    void on_pbInitializeScanFloodNoise_clicked();
-    void on_tabwidScanFlood_cellChanged(int row, int column);
     void on_actionWindow_navigator_triggered();
     void on_actionGeometry_triggered();
     void on_actionReconstructor_triggered();
@@ -361,9 +303,6 @@ private slots:
     void on_actionSave_position_and_stratus_of_all_windows_triggered();
     void on_actionLoad_positions_and_status_of_all_windows_triggered();
     void on_actionMaterial_inspector_window_triggered();
-    void on_twSingleScan_currentChanged(int index);
-    void on_pbExportDeposition_clicked();
-    void on_pbImportDeposition_clicked();
     void on_cbEnableElNoise_toggled(bool checked);
     void on_actionExamples_triggered();
     void on_cobSecScintillationGenType_currentIndexChanged(int index);
@@ -378,7 +317,6 @@ private slots:
     void LoadSimTreeRequested();
     void on_pbRemoveSource_clicked();
     void on_pbAddSource_clicked();
-    void on_pbUpdateSources_clicked();
     void on_pbUpdateSourcesIndication_clicked();
     void on_pbGunShowSource_toggled(bool checked);
 
@@ -402,30 +340,28 @@ public:
 
     bool fSimDataNotSaved = false;
 
+    QJsonObject OvTesterSettings;
+
     void createScriptWindow();
 
     void SimGeneralConfigToJson(QJsonObject &jsonMaster);                              //Save to JSON general options of simulation
-    void SimPointSourcesConfigToJson(QJsonObject &jsonMaster, bool fVerbose = false);  //Save to JSON config for PointSources simulation
+    void SimPointSourcesConfigToJson(QJsonObject &jsonMaster);  //Save to JSON config for PointSources simulation
     void SimParticleSourcesConfigToJson(QJsonObject &json);     //Save to JSON config for ParticleSources simulation
     void updatePMArrayDataIndication();
     void writeLoadExpDataConfigToJson(QJsonObject &json);
     bool readLoadExpDataConfigFromJson(QJsonObject &json);
     void clearGeoMarkers(int All_Rec_True = 0);
-    void clearCustomScanNodes();
     void setFontSizeAllWindows(int size);
     void writeExtraGuiToJson(QJsonObject &json);
     void readExtraGuiFromJson(QJsonObject &json);
     void SaveSimulationDataTree();
     void SaveSimulationDataAsText();
     void setFloodZposition(double Z);
-    void UpdateCustomScanNodesIndication();
-    void CalculateIndividualQEPDE(); //Public for use in scripting
-    void clearEnergyVector();
+    void ShowSource(const AParticleSourceRecord *p, bool clear = true);
+    void TestParticleGun(AParticleGun *ParticleSources, int numParticles);
+
 private:
     bool startupDetector();  //on ANTS start load/create detector
-    void PointSource_UpdateTabWidget();
-    void PointSource_InitTabWidget();
-    void PointSource_ReadTabWidget();
     void CheckSetMaterial(const QString name, QComboBox* cob, QVector<QString>* vec);
     void ToggleUpperLowerPMs();
     void PopulatePMarray(int ul, double z, int istart);
@@ -441,14 +377,7 @@ private:
     int LoadSPePHSfile(QString fileName, QVector<double>* SPePHS_x, QVector<double>* SPePHS);                   ///see MainWindowDiskIO.cpp    
     QStringList LoadedEventFiles, LoadedTreeFiles;
 
-    void ShowSource(int isource, bool clear = true);
-
-    QString CheckerScript;
-
-    QVector<ScanFloodStructure> ScanFloodNoise;
-    bool NoiseTableLocked;
-    double ScanFloodNoiseProbability = 0;
-
+//    QString CheckerScript; //obsolete?
     QString PreprocessingFileName;
 
     int PreviousNumberPMs = 0;
@@ -459,15 +388,18 @@ private:
 
     bool fStopLoadRequested;
 
+    bool bOptOvDialogPositioned = false;
+    QSize OptOvDialogSize;
+    QPoint OptOvDialogPosition;
+
+    AG4SimulationSettings G4SimSet;
+
     void clearPreprocessingData();
     void updateCOBsWithPMtypeNames();
-    void ViewChangeRelFactors(QString options);    
 
 private slots:
     void timerTimeout(); //timer-based update of Root events
 
-    void on_cbIndividualParticle_clicked(bool checked);
-    void on_ledLinkingProbability_editingFinished();
     void on_pbShowCheckUpWindow_clicked();
     void on_lePreprocessingMultiply_editingFinished();
     void on_extractPedestals_clicked();   
@@ -479,17 +411,10 @@ private slots:
     void on_pbLoadPMcenters_clicked();
     void on_pbSavePMcenters_clicked();
     void on_pbSetPMtype_clicked();    
-    void on_pbViewChangeRelQEfactors_clicked();
-    void on_pbLoadRelQEfactors_clicked();
-    void on_pbViewChangeRelELfactors_clicked();
-    void on_pbLoadRelELfactors_clicked();
-    void on_pbRandomScaleELaverages_clicked();
-    void on_pbSetELaveragesToUnity_clicked();
-    void on_pbShowRelGains_clicked();
+    void on_pbSetSPEfactors_clicked();
     void on_actionSave_configuration_triggered();
     void on_actionLoad_configuration_triggered();
     void on_pbRemoveParticle_clicked();
-    void on_lwGunParticles_currentRowChanged(int currentRow);
     void on_pbSaveParticleSource_clicked();
     void on_pbLoadParticleSource_clicked();
     void on_pbSaveResults_clicked();
@@ -497,7 +422,6 @@ private slots:
     void on_lwLoadedEventsFiles_itemChanged(QListWidgetItem *item);
     void on_pobTest_clicked();
     void on_actionGain_evaluation_triggered();
-    void on_leiParticleLinkedTo_editingFinished();
     void on_cbLRFs_toggled(bool checked);  
     void on_pbClearAdd_clicked();
     void on_pbClearMulti_clicked();
@@ -510,30 +434,16 @@ private slots:
     void on_cobXYtype_activated(int index);
     void on_cobTOP_activated(int index);
     void on_actionNew_detector_triggered();
-    void on_pbSurfaceWLS_Show_clicked();
-    void on_pbSurfaceWLS_Load_clicked();
-    void on_pbSurfaceWLS_ShowSpec_clicked();
-    void on_pbSurfaceWLS_LoadSpec_clicked();
     void on_pbReloadTreeData_clicked();
-    void on_pbRenameSource_clicked();
     void on_pbStopLoad_clicked();
-    void on_pbConfigureNumberOfThreads_clicked();
     void on_cobFixedDirOrCone_currentIndexChanged(int index);
-    void on_cbLinkingOpposite_clicked(bool checked);
     void on_pbShowComptonAngles_clicked();
     void on_pbShowComptonEnergies_clicked();
     void on_pbCheckRandomGen_clicked();
 
-private slots:
-    void on_cbPointSourceBuildTracks_toggled(bool checked);
-    void on_cbGunPhotonTracks_toggled(bool checked);
-    void on_cbBuilPhotonTrackstester_toggled(bool checked);
-
     /************************* Simulation *************************/
 public:
     void startSimulation(QJsonObject &json);
-private:
-    ParticleSourceSimulator *setupParticleTestSimulation(GeneralSimSettings &simSettings);
 signals:
     void StopRequested();
 private slots:
@@ -542,20 +452,12 @@ private slots:
 
 private slots:
     void on_pbGDML_clicked();
-    void on_pbLoadNodes_clicked();
-    void on_pbShowNodes_clicked();
-    void on_pbRunNodeScript_clicked();
     void on_cobPMdeviceType_activated(const QString &arg1);
-    void on_cobMatPointSource_activated(int index);
     void on_pbShowColorCoding_pressed();
     void on_pbShowColorCoding_released();
     void on_actionOpen_settings_triggered();
     void on_actionSave_Load_windows_status_on_Exit_Init_toggled(bool arg1);
-    void on_pbShowEnergyDeposition_clicked();
     void on_pbUpdateElectronics_clicked();
-    void on_ledSimplisticAbs_editingFinished();
-    void on_ledSimplisticSpecular_editingFinished();
-    void on_ledSimplisticScatter_editingFinished();
     void on_pbOverlay_clicked();
     void on_pbScalePDE_clicked();
     void on_pbLoadManifestFile_clicked();
@@ -566,16 +468,6 @@ private slots:
     void on_pbPDEFromWavelength_clicked();
     void on_cobLoadDataType_customContextMenuRequested(const QPoint &pos);
     void on_pbManuscriptExtractNames_clicked();
-    void on_pbShowDetailedLog_clicked();
-    void on_pbCSMtestmany_clicked();
-    void on_pbST_showTracks_clicked();
-    void on_pbST_AngleCos_clicked();
-    void on_lwOverrides_itemClicked(QListWidgetItem *item);
-    void on_pbST_uniform_clicked();
-    void on_pbST_RvsAngle_clicked();
-    void on_pbST_ReflectionVsParameter_clicked();
-    void on_pbST_VsParameterHelp_clicked();
-    void on_cobST_ShowWhatRef_activated(int index);
     void on_actionGlobal_script_triggered();
     void on_pbLockGui_clicked();
     void on_pbUnlockGui_clicked();
@@ -588,14 +480,11 @@ private slots:
     void on_cbEnableMCcrosstalk_toggled(bool checked);
     void on_pbRemoveCellMCcrosstalk_clicked();
     void on_pbMCnormalize_clicked();
-    void on_leSourceLimitMaterial_textChanged(const QString &arg1);
     void on_leLimitNodesObject_textChanged(const QString &arg1);
     void on_cbLimitNodesOutsideObject_toggled(bool checked);
     void on_bpResults_clicked();
     void on_pobTest_2_clicked();
-    void on_bpResults_2_clicked();
     void on_actionScript_window_triggered();
-    void on_cobParticleSource_activated(int index);
     void on_actionQuick_save_1_triggered();
     void on_actionQuick_save_2_triggered();
     void on_actionQuick_save_3_triggered();
@@ -611,28 +500,106 @@ private slots:
     void on_actionQuick_load_3_hovered();
     void on_actionLoad_last_config_hovered();
     void on_cobPartPerEvent_currentIndexChanged(int index);
-
     void on_actionOpen_Python_window_triggered();
-
     void on_ledElNoiseSigma_Norm_editingFinished();
-
     void on_cbDarkCounts_Enable_toggled(bool checked);
-
     void on_pbDarkCounts_Show_clicked();
-
     void on_pbDarkCounts_Load_clicked();
-
     void on_pbDarkCounts_Delete_clicked();
-
     void on_pushButton_clicked();
-
     void on_cobDarkCounts_Model_currentIndexChanged(int index);
-
     void on_cobDarkCounts_LoadOptions_currentIndexChanged(int index);
-
     void on_actionServer_window_triggered();
-
     void on_actionServer_settings_triggered();
+    void on_actionGrid_triggered();
+    void on_pbOpenTrackProperties_Phot_clicked();
+    void on_pbTrackOptionsGun_clicked();
+    void on_pbQEacceleratorWarning_clicked();
+    void on_ledSphericalPMAngle_editingFinished();
+    void on_pbEditOverride_clicked();
+    void on_lwOverrides_itemDoubleClicked(QListWidgetItem *item);
+    void on_lwOverrides_itemSelectionChanged();
+
+    void on_pbShowOverrideMap_clicked();
+
+    void on_pbStopScan_clicked();
+
+    void on_pbPMtypeHelp_clicked();
+
+    void on_pbEditParticleSource_clicked();
+
+    void on_lwDefinedParticleSources_itemDoubleClicked(QListWidgetItem *item);
+
+    void on_lwDefinedParticleSources_itemClicked(QListWidgetItem *item);
+
+    void on_pbGenerateFromFile_Help_clicked();
+
+    void on_pbGenerateFromFile_Change_clicked();
+
+    void on_leGenerateFromFile_FileName_editingFinished();
+
+    void on_pbGenerateFromFile_Check_clicked();
+
+    void on_pbTrackOptionsGun_customContextMenuRequested(const QPoint &pos);
+
+    void on_pbOpenTrackProperties_Phot_customContextMenuRequested(const QPoint &pos);
+
+    void on_pbParticleGenerationScript_clicked();
+
+    void on_pteParticleGenerationScript_customContextMenuRequested(const QPoint &pos);
+
+    void on_pbSetPDEfactors_clicked();
+
+    void on_pnShowHideAdvanced_Particle_toggled(bool checked);
+
+    void on_pbGoToConfigueG4ants_clicked();
+
+    void on_cbGeant4ParticleTracking_toggled(bool checked);
+
+    void on_pbG4Settings_clicked();
+
+    void on_pbAddNewParticle_clicked();
+
+    void on_pbAddIon_clicked();
+
+    void on_pbRenameParticle_clicked();
+
+    void on_pbLoadExampleFileFromFileGen_clicked();
+
+    void on_pbNodesFromFileHelp_clicked();
+
+    void on_pbNodesFromFileChange_clicked();
+
+    void on_pbNodesFromFileCheckShow_clicked();
+
+    void on_pbConvertToIon_clicked();
+
+    void on_actionExit_triggered();
+
+    void on_pbShowPDEfactors_clicked();
+
+    void on_pbGainsUpdateGUI_clicked();
+
+    void on_pbShowSPEfactors_clicked();
+
+    void on_pbRandomizePDEfactors_clicked();
+
+    void on_pbRandomizeSPEfactors_clicked();
+
+    void on_pbCearOverridePDEscalar_clicked();
+
+    void on_pbCearOverridePDEwave_clicked();
+
+    void on_pbCearOverrideAngular_clicked();
+
+    void on_pbCearOverrideArea_clicked();
+
+    void on_pbHelpDetectionEfficiency_clicked();
+
+    void on_pbOpenLogOptions_clicked();
+
+    void on_pbOpenLogOptions2_clicked();
+
 
 public slots:
     void on_pbRebuildDetector_clicked();
@@ -648,12 +615,10 @@ public slots:
 
 private:
     void initDetectorSandwich();
-    void SourceUpdateThisParticleIndication();
     void onGuiEnableStatus(bool fLocked);
-    void clearParticleSourcesIndication();   
-    void updateOneParticleSourcesIndication(ParticleSourceStructure *ps);
     void ShowParticleSource_noFocus();
-    void updateActivityIndication();
+    void showPDEorSPEfactors(bool bShowPDE);
+    void randomizePDEorSPEfactors(bool bDoPDE, bool bUniform, double min, double max, double mean, double sigma);
 
 #ifdef __USE_ANTS_PYTHON__
     void createPythonScriptWindow();
@@ -665,10 +630,11 @@ public slots:
     void OnWarningMessage(QString text);
     void OnDetectorColorSchemeChanged(int scheme, int matId);    
     void OnSlabDoubleClicked(QString SlabName);
-    void onNewConfigLoaded();
-
+    void onNewConfigLoaded();    
+    void onOpticalOverrideDialogAccepted();
 signals:
     void RequestStopLoad();
+    void RequestUpdateSimConfig(); //used to delay execution (quesued connection have to be used). Used in Lambda expression!
 };
 
 #endif // MAINWINDOW_H

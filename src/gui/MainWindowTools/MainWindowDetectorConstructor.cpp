@@ -8,11 +8,12 @@
 #include "reconstructionwindow.h"
 #include "gainevaluatorwindowclass.h"
 #include "detectorclass.h"
-#include "globalsettingsclass.h"
+#include "aglobalsettings.h"
 #include "materialinspectorwindow.h"
 #include "checkupwindowclass.h"
 #include "asandwich.h"
-#include "slab.h"
+#include "aslab.h"
+#include "slabdelegate.h"
 #include "aslablistwidget.h"
 #include "ageoobject.h"
 #include "ageotreewidget.h"
@@ -52,11 +53,9 @@ void MainWindow::ReconstructDetector(bool fKeepData)
 
 bool MainWindow::startupDetector()
 {
-  MainWindow::initDetectorSandwich(); //create detector sandwich control and link GUI signals/slots
-  //    qDebug() << "-->DetectorSandwich initialized";
-  if (QFile(GlobSet->ExamplesDir + "/StartupDetector.json").exists())
+  if (QFile(GlobSet.ExamplesDir + "/StartupDetector.json").exists())
     {
-      Config->LoadConfig(GlobSet->ExamplesDir + "/StartupDetector.json");
+      Config->LoadConfig(GlobSet.ExamplesDir + "/StartupDetector.json");
       return true;
     }
   else
@@ -71,10 +70,9 @@ bool MainWindow::startupDetector()
 
       //Generate MaterialCollection
       MpCollection->AddNewMaterial();
-      MpCollection->UpdateMaterial(MpCollection->countMaterials()-1, "Air", 1.2041e-3, 1, 0, 5, 100, 2, 5, 1, 0, 0, 0);
       AddDefaultPMtype();
-      MainWindow::on_pbRefreshMaterials_clicked();
-      MainWindow::on_pbRefreshOverrides_clicked();
+      //MainWindow::on_pbRefreshMaterials_clicked();
+      //MainWindow::on_pbRefreshOverrides_clicked();
       //create detector geometry and visualize
       qDebug()<<"-> Pre-building make-shift detector";
       Detector->PMarrays[0].fActive = ui->cbUPM->isChecked();
@@ -95,39 +93,41 @@ bool MainWindow::startupDetector()
 
 void MainWindow::initDetectorSandwich()
 {
-  //ListWidget for slabs
-  lw = new ASlabListWidget(Detector->Sandwich);
-  QVBoxLayout* laySandwich = new QVBoxLayout();
-    laySandwich->setContentsMargins(0,0,0,0);
-    ui->saSandwich->setLayout(laySandwich);
-    connect(Detector->Sandwich, SIGNAL(RequestGuiUpdate()), lw, SLOT(UpdateGui()));
+    //ListWidget for slabs
+    lw = new ASlabListWidget(Detector->Sandwich);
+    connect(Detector->Sandwich, &ASandwich::RequestGuiUpdate, lw, &ASlabListWidget::UpdateGui);
+    connect(lw, &ASlabListWidget::RequestHighlightObject, DAwindow, &DetectorAddOnsWindow::ShowObject);
+    connect(lw, &ASlabListWidget::SlabDoubleClicked, this, &MainWindow::OnSlabDoubleClicked);
     lw->UpdateGui();
-  laySandwich->addWidget(lw);
-  connect(lw, SIGNAL(RequestHighlightObject(QString)), DAwindow, SLOT(ShowObject(QString)));
 
-  //Default XY properties
-  ASlabXYDelegate* DefaultXY_delegate = lw->GetDefaultXYdelegate();
-  QHBoxLayout* xyl = new QHBoxLayout();
+    QVBoxLayout* laySandwich = new QVBoxLayout();
+    laySandwich->setContentsMargins(0,0,0,0);
+    laySandwich->addWidget(lw);
+    ui->saSandwich->setLayout(laySandwich);
+
+    //Default XY properties
+    ASlabXYDelegate* DefaultXY_delegate = lw->GetDefaultXYdelegate();
+
+    QHBoxLayout* xyl = new QHBoxLayout();
     xyl->setContentsMargins(0,0,0,0);
     xyl->addWidget(DefaultXY_delegate);
-  ui->fCommonXY->setLayout(xyl);
+    ui->fCommonXY->setLayout(xyl);
 
-  MainWindow::UpdateSandwichGui();
+    UpdateSandwichGui();
 
-  connect(Detector->Sandwich, SIGNAL(WarningMessage(QString)), this, SLOT(OnWarningMessage(QString)));
-  connect(Detector->Sandwich, SIGNAL(RequestGuiUpdate()), this, SLOT(UpdateSandwichGui()));
-  connect(Detector->Sandwich, SIGNAL(RequestRebuildDetector()), this, SLOT(on_pbRebuildDetector_clicked()));
-  connect(Detector, SIGNAL(ColorSchemeChanged(int,int)), this, SLOT(OnDetectorColorSchemeChanged(int,int)));
-  connect(lw, SIGNAL(SlabDoubleClicked(QString)), this, SLOT(OnSlabDoubleClicked(QString)));
+    connect(Detector->Sandwich, &ASandwich::WarningMessage,         this, &MainWindow::OnWarningMessage);
+    connect(Detector->Sandwich, &ASandwich::RequestGuiUpdate,       this, &MainWindow::UpdateSandwichGui);
+    connect(Detector->Sandwich, &ASandwich::RequestRebuildDetector, this, &MainWindow::on_pbRebuildDetector_clicked);
+    connect(Detector,           &DetectorClass::ColorSchemeChanged, this, &MainWindow::OnDetectorColorSchemeChanged);
 
-  QString help = "Basic detector consists of a stack of slabs.\n"
-      "Choose here whether all slabs have the same shape and size,\n"
-      "  have the same shape but allowed to have different size,\n"
-      "  or can have individual shape (and size).\n\n"
-      "Slab properties can be modified right clicking on the corresponding slab!\n"
-      "New slabs can be created also using the right-mouse-click menu.";
-  ui->cobXYtype->setToolTip(help);
-  ui->label_285->setToolTip(help);  
+    QString help = "Basic detector consists of a stack of slabs.\n"
+                   "Choose here whether all slabs have the same shape and size,\n"
+                   "  have the same shape but allowed to have different size,\n"
+                   "  or can have individual shape (and size).\n\n"
+                   "Slab properties can be modified right clicking on the corresponding slab!\n"
+                   "New slabs can be created also using the right-mouse-click menu.";
+    ui->cobXYtype->setToolTip(help);
+    ui->label_285->setToolTip(help);
 }
 
 void MainWindow::OnSlabDoubleClicked(QString SlabName)
@@ -216,11 +216,9 @@ void MainWindow::CheckPresenseOfSecScintillator()
     {
       ui->cobScintTypePointSource->setCurrentIndex(0);
       ui->cbGunDoS2->setChecked(false);
-      ui->cbDoS2tester->setChecked(false);
     }
   ui->cobScintTypePointSource->setEnabled(Detector->fSecScintPresent);
   ui->cbGunDoS2->setEnabled(Detector->fSecScintPresent);
-  ui->cbDoS2tester->setEnabled(Detector->fSecScintPresent);
 }
 
 void MainWindow::NumberOfPMsHaveChanged()
@@ -254,7 +252,7 @@ void MainWindow::on_pbPositionScript_clicked()
     delete GenScriptWindow; GenScriptWindow = 0;
 
     AJavaScriptManager* jsm = new AJavaScriptManager(Detector->RandGen);
-    GenScriptWindow = new AScriptWindow(jsm, GlobSet, true, this);
+    GenScriptWindow = new AScriptWindow(jsm, true, this);
 
     int ul = ui->cobUpperLowerPMs->currentIndex();
     QString title = QString("Position PMs: ") + ( ul == 0 ? "upper array" : "lower array" );
@@ -263,38 +261,13 @@ void MainWindow::on_pbPositionScript_clicked()
     GenScriptWindow->ConfigureForLightMode(&Detector->PMarrays[ul].PositioningScript, title, example);
 
     PMscriptInterface = new InterfaceToPMscript();
-    GenScriptWindow->SetInterfaceObject(PMscriptInterface);
+    GenScriptWindow->RegisterInterfaceAsGlobal(PMscriptInterface);
+    GenScriptWindow->RegisterCoreInterfaces();
     connect(GenScriptWindow, &AScriptWindow::success, this, &MainWindow::PMscriptSuccess); // ***!!! uses ScriptWindow directly!
 
     recallGeometryOfLocalScriptWindow();
+    GenScriptWindow->UpdateGui();
     GenScriptWindow->show();
-
-/*
-    extractGeometryOfLocalScriptWindow();
-    if (GenScriptWindow) delete GenScriptWindow;
-    GenScriptWindow = new GenericScriptWindowClass(Detector->RandGen);
-    recallGeometryOfLocalScriptWindow();
-    int ul = ui->cobUpperLowerPMs->currentIndex();
-
-    //configure the script window and engine
-    PMscriptInterface = new InterfaceToPMscript(); //deleted by the GenScriptWindow
-    GenScriptWindow->SetInterfaceObject(PMscriptInterface);
-
-    GenScriptWindow->SetShowEvaluationResult(false); //do not show "undefined"
-    GenScriptWindow->SetExample("for (var i=0; i<3; i++) PM(i*60, (i-2)*60, 0, 0)");
-
-    QString s = (ul==0) ? "upper array":"lower array";
-    GenScriptWindow->SetTitle("Position PMs: "+s);
-
-    GenScriptWindow->SetScript(&Detector->PMarrays[ul].PositioningScript);
-
-    GenScriptWindow->SetStarterDir(GlobSet->LibScripts);
-
-    //define what to do on evaluation success
-    connect(GenScriptWindow, SIGNAL(success(QString)), this, SLOT(PMscriptSuccess()));
-    //if needed. connect signals of the interface object with the required slots of any ANTS2 objects
-    GenScriptWindow->show();
-    */
 }
 
 void MainWindow::PMscriptSuccess()

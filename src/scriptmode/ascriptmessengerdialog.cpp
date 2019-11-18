@@ -12,7 +12,19 @@
 AScriptMessengerDialog::AScriptMessengerDialog(QWidget *parent) :
     Parent(parent)
 {
-    init(false);
+    D = new QDialog(Parent);
+    //if (bMasterCopy) QObject::connect(D, &QDialog::finished, this, &AInterfaceToMessageWindow::Hide);
+
+    QVBoxLayout* l = new QVBoxLayout;
+    e = new QPlainTextEdit();
+    //e->setReadOnly(true);
+    l->addWidget(e);
+    D->setLayout(l);
+
+    D->setGeometry(X, Y, WW, HH);
+    D->setWindowTitle(Title);
+
+    connect(D, &QDialog::rejected, this, &AScriptMessengerDialog::onRejected);
 }
 
 AScriptMessengerDialog::~AScriptMessengerDialog()
@@ -28,7 +40,8 @@ bool AScriptMessengerDialog::IsShown() const
 
 void AScriptMessengerDialog::RestoreWidget()
 {
-    D->show();
+    D->setVisible(true);
+    D->showNormal();
     D->raise();
 }
 
@@ -57,6 +70,7 @@ void AScriptMessengerDialog::Clear()
 
 void AScriptMessengerDialog::Append(const QString &text)
 {
+    if (!D->isVisible()) D->show();
     e->appendHtml(text);
 }
 
@@ -64,21 +78,14 @@ void AScriptMessengerDialog::ShowTemporary(int ms)
 {
     Show();
 
+    if (ms == -1) return;
+
     QTime t;
     t.restart();
     do qApp->processEvents();
     while (t.elapsed() < ms);
 
     Hide();
-}
-
-void AScriptMessengerDialog::SetTransparent(bool flag)
-{
-    QString text = e->document()->toHtml();
-    delete D; D = 0;
-
-    init(flag);
-    e->appendHtml(text);
 }
 
 void AScriptMessengerDialog::SetDialogTitle(const QString &title)
@@ -110,30 +117,4 @@ void AScriptMessengerDialog::onRejected()
 {
     bShowStatus = false;
     Hide();
-}
-
-void AScriptMessengerDialog::init(bool bTransparent)
-{
-    D = new QDialog(Parent);
-    //if (bMasterCopy) QObject::connect(D, &QDialog::finished, this, &AInterfaceToMessageWindow::Hide);
-
-    QVBoxLayout* l = new QVBoxLayout;
-    e = new QPlainTextEdit();
-    //e->setReadOnly(true);
-    l->addWidget(e);
-    D->setLayout(l);
-
-    D->setGeometry(X, Y, WW, HH);
-    D->setWindowTitle(Title);
-
-    if (bTransparent)
-    {
-        D->setWindowFlags(Qt::FramelessWindowHint);
-        D->setAttribute(Qt::WA_TranslucentBackground);
-
-        e->setStyleSheet("background: rgba(0,0,255,0%)");
-        e->setFrameStyle(QFrame::NoFrame);
-    }
-
-    connect(D, &QDialog::rejected, this, &AScriptMessengerDialog::onRejected);
 }

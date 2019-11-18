@@ -9,6 +9,7 @@
 #include "aphoton.h"
 #include "atrackrecords.h"
 #include "amonitor.h"
+#include "atracerstateful.h"
 
 //Qt
 #include <QDebug>
@@ -31,23 +32,31 @@ APhotonTracer::APhotonTracer(TGeoManager *geoManager, TRandom2 *RandomGenerator,
     fGridShiftOn = false;
     fBuildTracks = false;
     p = new APhoton();
+    ResourcesForOverrides = new ATracerStateful(RandGen);
+
+    //for transfer to overrides
+    ResourcesForOverrides->generateScriptInfrastructureIfNeeded(MaterialCollection);
 }
 
 APhotonTracer::~APhotonTracer()
 {
+    delete ResourcesForOverrides;
     delete p;
 }
 
-void APhotonTracer::configure(const GeneralSimSettings *simSet, AOneEvent* oneEvent, bool fBuildTracks, QVector<TrackHolderClass*> *tracks)//bool fWave, bool fAngle,  bool fArea, int MaxTrans, bool fTracks, bool fFastTracks, bool fAccelQE, double maxQE, QVector<double> *MaxQEwave)
+void APhotonTracer::configure(const GeneralSimSettings *simSet, AOneEvent* oneEvent, bool fBuildTracks, std::vector<TrackHolderClass *> * tracks)//bool fWave, bool fAngle,  bool fArea, int MaxTrans, bool fTracks, bool fFastTracks, bool fAccelQE, double maxQE, QVector<double> *MaxQEwave)
 {
    SimSet = simSet;
    OneEvent = oneEvent;
+   MaxTracks = simSet->TrackBuildOptions.MaxPhotonTracks; //default, can be adjusted later (setMaxTracks() methof) if multithread
    this->fBuildTracks = fBuildTracks;
    Tracks = tracks;
+   PhotonTracksAdded = 0;
 }
 
 void APhotonTracer::TracePhoton(const APhoton* Photon)
-{ 
+{
+  if (bAbort) return;
   //qDebug() << "----accel is on?"<<SimSet->fQEaccelerator<< "Build tracks?"<<fBuildTracks;
   //accelerators
   if (SimSet->fQEaccelerator)
@@ -73,6 +82,11 @@ void APhotonTracer::TracePhoton(const APhoton* Photon)
 
    //=====inits=====
    navigator = GeoManager->GetCurrentNavigator();
+   if (!navigator)
+   {
+       qDebug() << "Photon tracer: current navigator does not exist, creating new";
+       navigator = GeoManager->AddNavigator();
+   }
    navigator->SetCurrentPoint(Photon->r);
    navigator->SetCurrentDirection(Photon->v);
    navigator->FindNode();
@@ -95,10 +109,9 @@ void APhotonTracer::TracePhoton(const APhoton* Photon)
 
    if (fBuildTracks)
      {
-       if (Tracks->size()<SimSet->MaxNumberOfTracks)
+       if (PhotonTracksAdded < MaxTracks)
          {
            track = new TrackHolderClass();
-           //qDebug() << "Track starts from:"<<p->r[0]<<p->r[1]<<p->r[2];
            track->Nodes.append(TrackNodeStruct(p->r, p->time));
          }
        else fBuildTracks = false;
@@ -227,7 +240,10 @@ void APhotonTracer::TracePhoton(const APhoton* Photon)
          //qDebug() << "Overrides defined! Model = "<<ov->getType();
          N = navigator->FindNormal(kFALSE);
          fHaveNormal = true;
-         AOpticalOverride::OpticalOverrideResultEnum result = ov->calculate(RandGen, p, N);
+         const double* PhPos = navigator->GetCurrentPoint();
+         for (int i=0; i<3; i++) p->r[i] = PhPos[i];
+         AOpticalOverride::OpticalOverrideResultEnum result = ov->calculate(*ResourcesForOverrides, p, N);
+         if (bAbort) return;
 
          switch (result)
            {
@@ -235,7 +251,7 @@ void APhotonTracer::TracePhoton(const APhoton* Photon)
                //qDebug() << "-Override: absorption triggered";
                navigator->PopDummy(); //clean up the stack
                if (SimSet->bDoPhotonHistoryLog)
-                   PhLog.append( APhotonHistoryLog(navigator->GetCurrentPoint(), nameFrom, p->time, p->waveIndex, APhotonHistoryLog::Override_Loss, MatIndexFrom, MatIndexTo) );
+                   PhLog.append( APhotonHistoryLog(PhPos, nameFrom, p->time, p->waveIndex, APhotonHistoryLog::Override_Loss, MatIndexFrom, MatIndexTo) );
                OneEvent->SimStat->OverrideLoss++;
                goto force_stop_tracing; //finished with this photon
            case AOpticalOverride::Back:
@@ -243,21 +259,22 @@ void APhotonTracer::TracePhoton(const APhoton* Photon)
                navigator->PopPoint();  //remaining in the original volume
                navigator->SetCurrentDirection(p->v); //updating direction
                if (SimSet->bDoPhotonHistoryLog)
-                   PhLog.append( APhotonHistoryLog(navigator->GetCurrentPoint(), nameFrom, p->time, p->waveIndex, APhotonHistoryLog::Override_Back, MatIndexFrom, MatIndexTo) );
+                   PhLog.append( APhotonHistoryLog(PhPos, nameFrom, p->time, p->waveIndex, APhotonHistoryLog::Override_Back, MatIndexFrom, MatIndexTo) );
                OneEvent->SimStat->OverrideBack++;
                continue; //send to the next iteration
            case AOpticalOverride::Forward:
                navigator->SetCurrentDirection(p->v); //updating direction
                fDoFresnel = false; //stack cleaned afterwards
                if (SimSet->bDoPhotonHistoryLog)
-                   PhLog.append( APhotonHistoryLog(navigator->GetCurrentPoint(), nameTo, p->time, p->waveIndex, APhotonHistoryLog::Override_Forward, MatIndexFrom, MatIndexTo) );
+                   PhLog.append( APhotonHistoryLog(PhPos, nameTo, p->time, p->waveIndex, APhotonHistoryLog::Override_Forward, MatIndexFrom, MatIndexTo) );
                OneEvent->SimStat->OverrideForward++;
                break; //switch break
            case AOpticalOverride::NotTriggered:
                fDoFresnel = true;
                break; //switch break
            default:
-               qCritical() << "override reported an error!";
+               qCritical() << "override error - doing fresnel instead!";
+               fDoFresnel = true;
            }
        }
      else fDoFresnel = true;
@@ -400,7 +417,7 @@ void APhotonTracer::TracePhoton(const APhoton* Photon)
 force_stop_tracing:
    if (SimSet->bDoPhotonHistoryLog)
      {
-       AppendHistoryRecord(); //Add tracks is alsow there, it has extra filtering
+       AppendHistoryRecord(); //Add tracks is also there, it has extra filtering
      }
    else
      {
@@ -409,6 +426,12 @@ force_stop_tracing:
 
    //qDebug()<<"Finished with the photon";
    //qDebug() << "Track size:" <<Tracks->size();
+}
+
+void APhotonTracer::hardAbort()
+{
+    bAbort = true;
+    ResourcesForOverrides->abort(); //if script engine is there will abort evaluation
 }
 
 void APhotonTracer::AppendHistoryRecord()
@@ -484,13 +507,29 @@ void APhotonTracer::AppendHistoryRecord()
     }
 }
 
+#include "atrackbuildoptions.h"
 void APhotonTracer::AppendTrack()
 {
   //color track according to PM hit status and scintillation type
-  if ( SimSet->fTracksOnPMsOnly && fMissPM ) delete track;
+  //if ( SimSet->fTracksOnPMsOnly && fMissPM ) delete track;
+  if ( SimSet->TrackBuildOptions.bSkipPhotonsMissingPMs && fMissPM )
+      delete track;
   else
     {
       track->UserIndex = 22;
+
+      ATrackAttributes ta;
+      if (!fMissPM && SimSet->TrackBuildOptions.bPhotonSpecialRule_HittingPMs)
+          ta = SimSet->TrackBuildOptions.TA_PhotonsHittingPMs;
+      else if (p->scint_type == 2 && SimSet->TrackBuildOptions.bPhotonSpecialRule_SecScint)
+          ta = SimSet->TrackBuildOptions.TA_PhotonsSecScint;
+      else
+          ta = SimSet->TrackBuildOptions.TA_Photons;
+
+      track->Color = ta.color;
+      track->Width = ta.width;
+      track->Style = ta.style;
+/*
       track->Width = 1;
       if (fMissPM)
         {
@@ -501,8 +540,11 @@ void APhotonTracer::AppendTrack()
             default: track->Color = kGray;
             }
         }
-      else track->Color = 2;//kRed
-      Tracks->append(track);
+      else track->Color = kRed;
+*/
+
+      Tracks->push_back(track);
+      PhotonTracksAdded++;
     }
 }
 
@@ -607,8 +649,9 @@ APhotonTracer::AbsRayEnum APhotonTracer::AbsorptionAndRayleigh()
                     navigator->SetCurrentDirection(p->v);
                     //qDebug() << "After:"<<p->WaveIndex;
 
-                    if (SimSet->fTimeResolved)
-                        p->time += RandGen->Exp(  MaterialFrom->PriScintDecayTime );
+                    //if (SimSet->fTimeResolved)
+                    //    p->time += RandGen->Exp(  MaterialFrom->PriScintDecayTime );
+                    p->time += (*MaterialCollection)[MatIndexFrom]->GeneratePrimScintTime(RandGen);
 
                     OneEvent->SimStat->Reemission++;
                     if (SimSet->bDoPhotonHistoryLog)

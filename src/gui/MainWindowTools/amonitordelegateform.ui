@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>404</width>
-    <height>398</height>
+    <width>534</width>
+    <height>533</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -15,7 +15,7 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_9">
    <property name="spacing">
-    <number>6</number>
+    <number>5</number>
    </property>
    <property name="leftMargin">
     <number>0</number>
@@ -29,19 +29,6 @@
    <property name="bottomMargin">
     <number>0</number>
    </property>
-   <item>
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>40</height>
-      </size>
-     </property>
-    </spacer>
-   </item>
    <item>
     <layout class="QHBoxLayout" name="horizontalLayout_11">
      <item>
@@ -528,7 +515,7 @@ changed</string>
        <property name="minimumSize">
         <size>
          <width>0</width>
-         <height>22</height>
+         <height>25</height>
         </size>
        </property>
        <property name="font">
@@ -614,7 +601,7 @@ changed</string>
       <item>
        <widget class="QComboBox" name="cobPrimarySecondary">
         <property name="sizePolicy">
-         <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
@@ -625,11 +612,8 @@ changed</string>
           <height>22</height>
          </size>
         </property>
-        <property name="maximumSize">
-         <size>
-          <width>150</width>
-          <height>16777215</height>
-         </size>
+        <property name="toolTip">
+         <string/>
         </property>
         <item>
          <property name="text">
@@ -643,7 +627,35 @@ changed</string>
         </item>
         <item>
          <property name="text">
-          <string>Primary+secondary</string>
+          <string>Prim+Sec</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+      <item>
+       <widget class="QComboBox" name="cobDirectIndirect">
+        <property name="minimumSize">
+         <size>
+          <width>0</width>
+          <height>22</height>
+         </size>
+        </property>
+        <property name="toolTip">
+         <string>Direct = particles which have no prior scattering (neutral) or energy deposition (charged)</string>
+        </property>
+        <item>
+         <property name="text">
+          <string>Direct</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Indirect</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Dir+Indir</string>
          </property>
         </item>
        </widget>
@@ -652,548 +664,587 @@ changed</string>
     </widget>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="horizontalLayout_17">
-     <property name="spacing">
-      <number>12</number>
-     </property>
-     <property name="leftMargin">
-      <number>15</number>
-     </property>
-     <property name="topMargin">
-      <number>5</number>
-     </property>
-     <property name="rightMargin">
-      <number>15</number>
-     </property>
-     <item>
-      <layout class="QVBoxLayout" name="verticalLayout_7">
-       <property name="spacing">
-        <number>2</number>
+    <layout class="QGridLayout" name="gridLayout">
+     <item row="1" column="4">
+      <widget class="QLabel" name="label_23">
+       <property name="text">
+        <string>from:</string>
        </property>
-       <item>
-        <widget class="QLabel" name="label_19">
-         <property name="text">
-          <string>Position</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="label_21">
-         <property name="text">
-          <string>Time</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="label_27">
-         <property name="text">
-          <string>Angle</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="labWave">
-         <property name="text">
-          <string>Wave ind</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="labEnergy">
-         <property name="text">
-          <string>Energy</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-       </item>
-      </layout>
+       <property name="alignment">
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+      </widget>
      </item>
-     <item>
-      <layout class="QVBoxLayout" name="verticalLayout_8">
-       <property name="spacing">
-        <number>2</number>
+     <item row="2" column="1">
+      <widget class="QLabel" name="label_27">
+       <property name="text">
+        <string>Angle</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="4">
+      <widget class="QLabel" name="label_26">
+       <property name="text">
+        <string>from:</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="3">
+      <widget class="QSpinBox" name="sbWaveBins">
+       <property name="minimumSize">
+        <size>
+         <width>50</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="minimum">
+        <number>1</number>
+       </property>
+       <property name="maximum">
+        <number>1000000</number>
+       </property>
+       <property name="value">
+        <number>100</number>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="6">
+      <widget class="QLabel" name="labWaveTo">
+       <property name="text">
+        <string>to:</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="5">
+      <widget class="QSpinBox" name="sbYbins">
+       <property name="minimumSize">
+        <size>
+         <width>50</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="minimum">
+        <number>1</number>
+       </property>
+       <property name="maximum">
+        <number>1000000</number>
+       </property>
+       <property name="value">
+        <number>100</number>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="7">
+      <widget class="QLineEdit" name="ledWaveTo">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>80</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="toolTip">
+        <string>Wave index to</string>
+       </property>
+       <property name="text">
+        <string>0</string>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="1">
+      <widget class="QLabel" name="labEnergy">
+       <property name="text">
+        <string>Energy</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="1">
+      <widget class="QLabel" name="labWave">
+       <property name="text">
+        <string>Wave ind</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="5">
+      <widget class="QLineEdit" name="ledEnergyFrom">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>80</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="toolTip">
+        <string/>
+       </property>
+       <property name="text">
+        <string>0</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="2">
+      <widget class="QLabel" name="label_22">
+       <property name="text">
+        <string>bins:</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="3">
+      <widget class="QSpinBox" name="sbXbins">
+       <property name="minimumSize">
+        <size>
+         <width>50</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="minimum">
+        <number>1</number>
+       </property>
+       <property name="maximum">
+        <number>1000000</number>
+       </property>
+       <property name="value">
+        <number>100</number>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="5">
+      <widget class="QLineEdit" name="ledAngleFrom">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>80</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="toolTip">
+        <string>in degrees</string>
+       </property>
+       <property name="text">
+        <string>0</string>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="2">
+      <widget class="QLabel" name="labEnergyBins">
+       <property name="text">
+        <string>bins:</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="1">
+      <widget class="QLabel" name="label_21">
+       <property name="text">
+        <string>Time</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="2">
+      <widget class="QLabel" name="label_37">
+       <property name="text">
+        <string>X bins:</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="2">
+      <widget class="QLabel" name="labWaveBins">
+       <property name="text">
+        <string>bins:</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="3">
+      <widget class="QSpinBox" name="sbEnergyBins">
+       <property name="minimumSize">
+        <size>
+         <width>50</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="minimum">
+        <number>1</number>
+       </property>
+       <property name="maximum">
+        <number>1000000</number>
+       </property>
+       <property name="value">
+        <number>100</number>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="5">
+      <widget class="QLineEdit" name="ledTimeFrom">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>80</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="toolTip">
+        <string>in ns</string>
+       </property>
+       <property name="text">
+        <string>0</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="6">
+      <widget class="QLabel" name="label_25">
+       <property name="text">
+        <string>to:</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="7">
+      <widget class="QLineEdit" name="ledTimeTo">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>80</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="toolTip">
+        <string>in ns</string>
+       </property>
+       <property name="text">
+        <string>0</string>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="6">
+      <widget class="QLabel" name="labEnergyTo">
+       <property name="text">
+        <string>to:</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="4">
+      <widget class="QLabel" name="labEnergyFrom">
+       <property name="text">
+        <string>from:</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="6">
+      <widget class="QLabel" name="label_24">
+       <property name="text">
+        <string>to:</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="7">
+      <widget class="QLineEdit" name="ledEnergyTo">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>80</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="toolTip">
+        <string/>
+       </property>
+       <property name="text">
+        <string>0</string>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="1">
+      <widget class="QLabel" name="label_19">
+       <property name="text">
+        <string>     Position     </string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="0" column="4">
+      <widget class="QLabel" name="label_20">
+       <property name="text">
+        <string>Y bins:</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="2">
+      <widget class="QLabel" name="label_28">
+       <property name="text">
+        <string>bins:</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="3">
+      <widget class="QSpinBox" name="sbAngleBins">
+       <property name="minimumSize">
+        <size>
+         <width>50</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="minimum">
+        <number>1</number>
+       </property>
+       <property name="maximum">
+        <number>1000000</number>
+       </property>
+       <property name="value">
+        <number>100</number>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="3">
+      <widget class="QSpinBox" name="sbTimeBins">
+       <property name="minimumSize">
+        <size>
+         <width>50</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="minimum">
+        <number>1</number>
+       </property>
+       <property name="maximum">
+        <number>1000000</number>
+       </property>
+       <property name="value">
+        <number>100</number>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="4">
+      <widget class="QLabel" name="labWaveFrom">
+       <property name="text">
+        <string>from:</string>
+       </property>
+       <property name="alignment">
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="5">
+      <widget class="QLineEdit" name="ledWaveFrom">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>80</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="toolTip">
+        <string>Wave index from</string>
+       </property>
+       <property name="text">
+        <string>0</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="7">
+      <widget class="QLineEdit" name="ledAngleTo">
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="maximumSize">
+        <size>
+         <width>80</width>
+         <height>16777215</height>
+        </size>
+       </property>
+       <property name="toolTip">
+        <string>in degrees</string>
+       </property>
+       <property name="text">
+        <string>90</string>
+       </property>
+      </widget>
+     </item>
+     <item row="1" column="8">
+      <widget class="QLabel" name="label_29">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>ns</string>
+       </property>
+      </widget>
+     </item>
+     <item row="2" column="8">
+      <widget class="QLabel" name="label_30">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>°</string>
+       </property>
+      </widget>
+     </item>
+     <item row="3" column="8">
+      <widget class="QLabel" name="labWaveUnits">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>0</width>
+         <height>0</height>
+        </size>
+       </property>
+       <property name="text">
+        <string/>
+       </property>
+      </widget>
+     </item>
+     <item row="4" column="8">
+      <widget class="QComboBox" name="cobEnergyUnits">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <property name="minimumSize">
+        <size>
+         <width>60</width>
+         <height>0</height>
+        </size>
        </property>
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_14">
-         <property name="spacing">
-          <number>7</number>
-         </property>
-         <item>
-          <widget class="QLabel" name="label_37">
-           <property name="text">
-            <string>bins:</string>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QSpinBox" name="sbXbins">
-           <property name="minimumSize">
-            <size>
-             <width>50</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="minimum">
-            <number>1</number>
-           </property>
-           <property name="maximum">
-            <number>1000000</number>
-           </property>
-           <property name="value">
-            <number>100</number>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="label_20">
-           <property name="text">
-            <string>Y bins:</string>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QSpinBox" name="sbYbins">
-           <property name="minimumSize">
-            <size>
-             <width>50</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="minimum">
-            <number>1</number>
-           </property>
-           <property name="maximum">
-            <number>1000000</number>
-           </property>
-           <property name="value">
-            <number>100</number>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <spacer name="horizontalSpacer">
-           <property name="orientation">
-            <enum>Qt::Horizontal</enum>
-           </property>
-           <property name="sizeHint" stdset="0">
-            <size>
-             <width>1000</width>
-             <height>20</height>
-            </size>
-           </property>
-          </spacer>
-         </item>
-        </layout>
+        <property name="text">
+         <string>meV</string>
+        </property>
        </item>
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_15">
-         <property name="spacing">
-          <number>7</number>
-         </property>
-         <item>
-          <widget class="QLabel" name="label_22">
-           <property name="text">
-            <string>bins:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QSpinBox" name="sbTimeBins">
-           <property name="minimumSize">
-            <size>
-             <width>50</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="minimum">
-            <number>1</number>
-           </property>
-           <property name="maximum">
-            <number>1000000</number>
-           </property>
-           <property name="value">
-            <number>100</number>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="label_23">
-           <property name="text">
-            <string>from:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLineEdit" name="ledTimeFrom">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="toolTip">
-            <string>in ns</string>
-           </property>
-           <property name="text">
-            <string>0</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="label_24">
-           <property name="text">
-            <string>to:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLineEdit" name="ledTimeTo">
-           <property name="toolTip">
-            <string>in ns</string>
-           </property>
-           <property name="text">
-            <string>0</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="label_29">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="minimumSize">
-            <size>
-             <width>50</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="text">
-            <string>ns</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
+        <property name="text">
+         <string>eV</string>
+        </property>
        </item>
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_16">
-         <property name="spacing">
-          <number>7</number>
-         </property>
-         <item>
-          <widget class="QLabel" name="label_28">
-           <property name="text">
-            <string>bins:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QSpinBox" name="sbAngleBins">
-           <property name="minimumSize">
-            <size>
-             <width>50</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="minimum">
-            <number>1</number>
-           </property>
-           <property name="maximum">
-            <number>1000000</number>
-           </property>
-           <property name="value">
-            <number>100</number>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="label_26">
-           <property name="text">
-            <string>from:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLineEdit" name="ledAngleFrom">
-           <property name="toolTip">
-            <string>in degrees</string>
-           </property>
-           <property name="text">
-            <string>0</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="label_25">
-           <property name="text">
-            <string>to:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLineEdit" name="ledAngleTo">
-           <property name="toolTip">
-            <string>in degrees</string>
-           </property>
-           <property name="text">
-            <string>90</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="label_30">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="minimumSize">
-            <size>
-             <width>50</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="text">
-            <string>deg</string>
-           </property>
-          </widget>
-         </item>
-        </layout>
+        <property name="text">
+         <string>keV</string>
+        </property>
        </item>
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_4">
-         <property name="spacing">
-          <number>7</number>
-         </property>
-         <property name="topMargin">
-          <number>0</number>
-         </property>
-         <item>
-          <widget class="QLabel" name="labWaveBins">
-           <property name="text">
-            <string>bins:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QSpinBox" name="sbWaveBins">
-           <property name="minimumSize">
-            <size>
-             <width>50</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="minimum">
-            <number>1</number>
-           </property>
-           <property name="maximum">
-            <number>1000000</number>
-           </property>
-           <property name="value">
-            <number>100</number>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="labWaveFrom">
-           <property name="text">
-            <string>from:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLineEdit" name="ledWaveFrom">
-           <property name="toolTip">
-            <string>Wave index from</string>
-           </property>
-           <property name="text">
-            <string>0</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="labWaveTo">
-           <property name="text">
-            <string>to:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLineEdit" name="ledWaveTo">
-           <property name="toolTip">
-            <string>Wave index to</string>
-           </property>
-           <property name="text">
-            <string>0</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="labWaveUnits">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="minimumSize">
-            <size>
-             <width>50</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="text">
-            <string/>
-           </property>
-          </widget>
-         </item>
-        </layout>
+        <property name="text">
+         <string>MeV</string>
+        </property>
        </item>
-       <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_20">
-         <property name="spacing">
-          <number>7</number>
-         </property>
-         <property name="topMargin">
-          <number>0</number>
-         </property>
-         <item>
-          <widget class="QLabel" name="labEnergyBins">
-           <property name="text">
-            <string>bins:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QSpinBox" name="sbEnergyBins">
-           <property name="minimumSize">
-            <size>
-             <width>50</width>
-             <height>0</height>
-            </size>
-           </property>
-           <property name="minimum">
-            <number>1</number>
-           </property>
-           <property name="maximum">
-            <number>1000000</number>
-           </property>
-           <property name="value">
-            <number>100</number>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="labEnergyFrom">
-           <property name="text">
-            <string>from:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLineEdit" name="ledEnergyFrom">
-           <property name="toolTip">
-            <string/>
-           </property>
-           <property name="text">
-            <string>0</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="labEnergyTo">
-           <property name="text">
-            <string>to:</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLineEdit" name="ledEnergyTo">
-           <property name="toolTip">
-            <string/>
-           </property>
-           <property name="text">
-            <string>0</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QComboBox" name="cobEnergyUnits">
-           <property name="sizePolicy">
-            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-             <horstretch>0</horstretch>
-             <verstretch>0</verstretch>
-            </sizepolicy>
-           </property>
-           <property name="minimumSize">
-            <size>
-             <width>50</width>
-             <height>0</height>
-            </size>
-           </property>
-           <item>
-            <property name="text">
-             <string>meV</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>eV</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>keV</string>
-            </property>
-           </item>
-           <item>
-            <property name="text">
-             <string>MeV</string>
-            </property>
-           </item>
-          </widget>
-         </item>
-        </layout>
-       </item>
-      </layout>
+      </widget>
      </item>
     </layout>
-   </item>
-   <item>
-    <spacer name="verticalSpacer_2">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>40</height>
-      </size>
-     </property>
-    </spacer>
    </item>
   </layout>
  </widget>
@@ -1206,12 +1257,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>91</x>
-     <y>28</y>
+     <x>144</x>
+     <y>85</y>
     </hint>
     <hint type="destinationlabel">
-     <x>162</x>
-     <y>98</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1222,12 +1273,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>247</x>
-     <y>21</y>
+     <x>486</x>
+     <y>66</y>
     </hint>
     <hint type="destinationlabel">
-     <x>199</x>
-     <y>94</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1238,12 +1289,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>227</x>
-     <y>40</y>
+     <x>343</x>
+     <y>99</y>
     </hint>
     <hint type="destinationlabel">
-     <x>218</x>
-     <y>91</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1254,12 +1305,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>334</x>
-     <y>46</y>
+     <x>498</x>
+     <y>99</y>
     </hint>
     <hint type="destinationlabel">
-     <x>226</x>
-     <y>96</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1270,12 +1321,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>302</x>
-     <y>83</y>
+     <x>472</x>
+     <y>143</y>
     </hint>
     <hint type="destinationlabel">
-     <x>210</x>
-     <y>99</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1286,12 +1337,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>307</x>
-     <y>106</y>
+     <x>472</x>
+     <y>172</y>
     </hint>
     <hint type="destinationlabel">
-     <x>224</x>
-     <y>111</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1302,12 +1353,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>313</x>
-     <y>128</y>
+     <x>472</x>
+     <y>201</y>
     </hint>
     <hint type="destinationlabel">
-     <x>221</x>
-     <y>120</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1318,12 +1369,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>94</x>
-     <y>83</y>
+     <x>164</x>
+     <y>142</y>
     </hint>
     <hint type="destinationlabel">
-     <x>172</x>
-     <y>85</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1334,12 +1385,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>95</x>
-     <y>109</y>
+     <x>164</x>
+     <y>172</y>
     </hint>
     <hint type="destinationlabel">
-     <x>167</x>
-     <y>108</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1350,12 +1401,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>88</x>
-     <y>128</y>
+     <x>157</x>
+     <y>202</y>
     </hint>
     <hint type="destinationlabel">
-     <x>172</x>
-     <y>120</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1366,12 +1417,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>162</x>
-     <y>164</y>
+     <x>253</x>
+     <y>243</y>
     </hint>
     <hint type="destinationlabel">
-     <x>182</x>
-     <y>110</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1382,12 +1433,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>148</x>
-     <y>211</y>
+     <x>253</x>
+     <y>290</y>
     </hint>
     <hint type="destinationlabel">
-     <x>170</x>
-     <y>110</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1398,12 +1449,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>319</x>
-     <y>210</y>
+     <x>518</x>
+     <y>290</y>
     </hint>
     <hint type="destinationlabel">
-     <x>220</x>
-     <y>122</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1414,12 +1465,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>113</x>
-     <y>237</y>
+     <x>195</x>
+     <y>322</y>
     </hint>
     <hint type="destinationlabel">
-     <x>178</x>
-     <y>120</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1430,12 +1481,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>290</x>
-     <y>242</y>
+     <x>425</x>
+     <y>322</y>
     </hint>
     <hint type="destinationlabel">
-     <x>215</x>
-     <y>116</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1446,12 +1497,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>137</x>
-     <y>279</y>
+     <x>175</x>
+     <y>363</y>
     </hint>
     <hint type="destinationlabel">
-     <x>175</x>
-     <y>96</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1462,12 +1513,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>243</x>
-     <y>273</y>
+     <x>281</x>
+     <y>363</y>
     </hint>
     <hint type="destinationlabel">
-     <x>200</x>
-     <y>104</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1478,12 +1529,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>123</x>
-     <y>297</y>
+     <x>177</x>
+     <y>394</y>
     </hint>
     <hint type="destinationlabel">
-     <x>173</x>
-     <y>110</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1494,12 +1545,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>155</x>
-     <y>336</y>
+     <x>177</x>
+     <y>425</y>
     </hint>
     <hint type="destinationlabel">
-     <x>170</x>
-     <y>111</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1510,12 +1561,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>128</x>
-     <y>345</y>
+     <x>177</x>
+     <y>456</y>
     </hint>
     <hint type="destinationlabel">
-     <x>169</x>
-     <y>116</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1526,12 +1577,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>155</x>
-     <y>384</y>
+     <x>177</x>
+     <y>487</y>
     </hint>
     <hint type="destinationlabel">
-     <x>179</x>
-     <y>111</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1542,12 +1593,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>227</x>
-     <y>295</y>
+     <x>322</x>
+     <y>394</y>
     </hint>
     <hint type="destinationlabel">
-     <x>192</x>
-     <y>105</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1558,12 +1609,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>217</x>
-     <y>319</y>
+     <x>322</x>
+     <y>425</y>
     </hint>
     <hint type="destinationlabel">
-     <x>182</x>
-     <y>87</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1574,12 +1625,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>248</x>
-     <y>360</y>
+     <x>322</x>
+     <y>456</y>
     </hint>
     <hint type="destinationlabel">
-     <x>190</x>
-     <y>103</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1590,12 +1641,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>248</x>
-     <y>384</y>
+     <x>322</x>
+     <y>487</y>
     </hint>
     <hint type="destinationlabel">
-     <x>190</x>
-     <y>111</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1606,12 +1657,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>329</x>
-     <y>312</y>
+     <x>449</x>
+     <y>394</y>
     </hint>
     <hint type="destinationlabel">
-     <x>221</x>
-     <y>106</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1622,12 +1673,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>329</x>
-     <y>336</y>
+     <x>449</x>
+     <y>425</y>
     </hint>
     <hint type="destinationlabel">
-     <x>213</x>
-     <y>112</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1638,12 +1689,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>329</x>
-     <y>360</y>
+     <x>449</x>
+     <y>456</y>
     </hint>
     <hint type="destinationlabel">
-     <x>225</x>
-     <y>110</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1654,12 +1705,12 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>329</x>
-     <y>384</y>
+     <x>449</x>
+     <y>487</y>
     </hint>
     <hint type="destinationlabel">
-     <x>223</x>
-     <y>109</y>
+     <x>303</x>
+     <y>188</y>
     </hint>
    </hints>
   </connection>
@@ -1670,12 +1721,28 @@ changed</string>
    <slot>click()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>351</x>
-     <y>375</y>
+     <x>516</x>
+     <y>487</y>
     </hint>
     <hint type="destinationlabel">
-     <x>170</x>
-     <y>108</y>
+     <x>303</x>
+     <y>188</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>cobDirectIndirect</sender>
+   <signal>activated(int)</signal>
+   <receiver>pbContentChanged</receiver>
+   <slot>click()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>473</x>
+     <y>311</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>254</x>
+     <y>145</y>
     </hint>
    </hints>
   </connection>

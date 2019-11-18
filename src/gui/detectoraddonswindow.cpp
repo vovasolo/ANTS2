@@ -8,10 +8,11 @@
 #include "ajavascriptmanager.h"
 #include "ascriptwindow.h"
 #include "detectorclass.h"
-#include "globalsettingsclass.h"
-#include "ainterfacetoaddobjscript.h"
+#include "aglobalsettings.h"
+#include "ageo_si.h"
 #include "asandwich.h"
-#include "slab.h"
+#include "aslab.h"
+#include "slabdelegate.h"
 #include "ageotreewidget.h"
 #include "ageoobject.h"
 #include "amessage.h"
@@ -20,6 +21,7 @@
 #include "amaterialparticlecolection.h"
 #include "aconfiguration.h"
 #include "ajsontools.h"
+#include "afiletools.h"
 
 #include <QDebug>
 #include <QFileDialog>
@@ -38,12 +40,17 @@
 #include "TGeoCompositeShape.h"
 
 DetectorAddOnsWindow::DetectorAddOnsWindow(MainWindow *parent, DetectorClass *detector) :
-  QMainWindow(parent),
+  AGuiWindow(parent),
   ui(new Ui::DetectorAddOnsWindow)
 {
   MW = parent;
   Detector = detector;
   ui->setupUi(this);
+
+  Qt::WindowFlags windowFlags = (Qt::Window | Qt::CustomizeWindowHint);
+  windowFlags |= Qt::Tool;
+  windowFlags |= Qt::WindowCloseButtonHint;
+  this->setWindowFlags( windowFlags );
 
   ui->pbBackToSandwich->setEnabled(false);
 
@@ -85,7 +92,7 @@ DetectorAddOnsWindow::DetectorAddOnsWindow(MainWindow *parent, DetectorClass *de
   QList<QLineEdit*> list = this->findChildren<QLineEdit *>();
   foreach(QLineEdit *w, list) if (w->objectName().startsWith("led")) w->setValidator(dv);
 
-  ui->cbAutoCheck->setChecked( MW->GlobSet->PerformAutomaticGeometryCheck );  
+  ui->cbAutoCheck->setChecked( MW->GlobSet.PerformAutomaticGeometryCheck );
   on_cbAutoCheck_stateChanged(111);
 }
 
@@ -128,69 +135,73 @@ void DetectorAddOnsWindow::SetTab(int tab)
 
 void DetectorAddOnsWindow::on_pbConvertToDummies_clicked()
 {
-  QList<int> ToAdd;
-  bool ok = ExtractNumbersFromQString(ui->lePMlist->text(), &ToAdd);
-  if (!ok)
+    QList<int> ToAdd;
+    bool ok = ExtractNumbersFromQString(ui->lePMlist->text(), &ToAdd);
+    if (!ok)
     {
-      message("Input error!", this);
-      return;
-    }
-
-  int iMaxPM = MW->PMs->count()-1;
-  for (int i=0; i<ToAdd.size(); i++)
-    if (ToAdd[i] >iMaxPM )
-      {
-        message("Range error!", this);
+        message("Input error!", this);
         return;
-      }
-
-  //---converting PMs to dummies---
-  bool SawLower = false;
-  bool SawUpper = false;
-  qSort(ToAdd.begin(), ToAdd.end()); //sorted - starts from smallest
-  for (int iadd=ToAdd.size()-1; iadd>-1; iadd--)
-    {
-       //adding dummy
-       PMdummyStructure dpm;
-
-       int ipm = ToAdd[iadd];
-//       qDebug()<<"PM->dummy  ToAddindex="<<iadd<<"pm number="<<ipm;
-
-       const APm &PM = MW->PMs->at(ipm);
-       dpm.r[0] = PM.x;
-       dpm.r[1] = PM.y;
-       dpm.r[2] = PM.z;
-
-       dpm.Angle[0] = PM.phi;
-       dpm.Angle[1] = PM.theta;
-       dpm.Angle[2] = PM.psi;
-
-       dpm.PMtype = PM.type;
-       dpm.UpperLower = PM.upperLower;
-
-       Detector->PMdummies.append(dpm);
-//       qDebug()<<"dummy added";
-
-       //deleting PM          
-       int ul, index;
-       Detector->findPM(ipm, ul, index);
-       Detector->PMarrays[ul].PositionsAnglesTypes.remove(index);
-//       qDebug()<<"PM removed";
-       if (ul == 0) SawUpper = true;
-       if (ul == 1) SawLower = true;
     }
-//  qDebug()<<"All list done!";
 
-  //updating array type  
-  if (SawUpper)
-    if (MW->PMArrayType(0) == 0) MW->SetPMarrayType(0, 1);
-  if (SawLower)
-    if (MW->PMArrayType(1) == 0) MW->SetPMarrayType(1, 1);
+    int iMaxPM = MW->PMs->count()-1;
+    for (int & i : ToAdd)
+        if (i < 0 || i > iMaxPM)
+        {
+            message("Range error!", this);
+            return;
+        }
 
-  MW->updatePMArrayDataIndication();
-  MW->NumberOfPMsHaveChanged();
-  //DetectorAddOnsWindow::UpdateDummyPMindication();
-  MW->ReconstructDetector();
+    bool SawLower = false;
+    bool SawUpper = false;
+    qSort(ToAdd.begin(), ToAdd.end()); //sorted - starts from smallest
+
+    for (int iadd=ToAdd.size()-1; iadd>-1; iadd--)
+    {
+        //adding dummy
+        PMdummyStructure dpm;
+
+        int ipm = ToAdd[iadd];
+        //       qDebug()<<"PM->dummy  ToAddindex="<<iadd<<"pm number="<<ipm;
+
+        const APm &PM = MW->PMs->at(ipm);
+        dpm.r[0] = PM.x;
+        dpm.r[1] = PM.y;
+        dpm.r[2] = PM.z;
+
+        dpm.Angle[0] = PM.phi;
+        dpm.Angle[1] = PM.theta;
+        dpm.Angle[2] = PM.psi;
+
+        dpm.PMtype = PM.type;
+        dpm.UpperLower = PM.upperLower;
+
+        Detector->PMdummies.append(dpm);
+        //       qDebug()<<"dummy added";
+
+        //deleting PM
+        int ul, index;
+        Detector->findPM(ipm, ul, index);
+        if (index == -1)
+        {
+            message("Something went wrong...", this);
+            return;
+        }
+        Detector->PMarrays[ul].PositionsAnglesTypes.remove(index);
+        //       qDebug()<<"PM removed";
+        if (ul == 0) SawUpper = true;
+        if (ul == 1) SawLower = true;
+    }
+    //  qDebug()<<"All list done!";
+
+    //updating array type
+    if (SawUpper)
+        if (MW->PMArrayType(0) == 0) MW->SetPMarrayType(0, 1);
+    if (SawLower)
+        if (MW->PMArrayType(1) == 0) MW->SetPMarrayType(1, 1);
+
+    MW->updatePMArrayDataIndication();
+    MW->NumberOfPMsHaveChanged();
+    MW->ReconstructDetector();
 }
 
 void DetectorAddOnsWindow::on_sbDummyPMindex_valueChanged(int arg1)
@@ -359,10 +370,10 @@ void DetectorAddOnsWindow::on_sbDummyType_valueChanged(int arg1)
 void DetectorAddOnsWindow::on_pbLoadDummyPMs_clicked()
 {
     QString fileName;
-    fileName = QFileDialog::getOpenFileName(this, "Load file with dummy PMs", MW->GlobSet->LastOpenDir, "Data files (*.dat);;Text files (*.txt);; All files (*.*)");
+    fileName = QFileDialog::getOpenFileName(this, "Load file with dummy PMs", MW->GlobSet.LastOpenDir, "Data files (*.dat);;Text files (*.txt);; All files (*.*)");
     //qDebug()<<fileName;
     if (fileName.isEmpty()) return;
-    MW->GlobSet->LastOpenDir = QFileInfo(fileName).absolutePath();
+    MW->GlobSet.LastOpenDir = QFileInfo(fileName).absolutePath();
     Detector->PMdummies.resize(0);
     MW->LoadDummyPMs(fileName);
     ui->sbDummyPMindex->setValue(0);
@@ -375,12 +386,10 @@ void DetectorAddOnsWindow::on_pbLoadDummyPMs_clicked()
 
 void DetectorAddOnsWindow::ShowObject(QString name)
 {
-  DetectorAddOnsWindow::HighlightVolume(name);
-  MW->GeometryWindow->SetAsActiveRootWindow();
-  Detector->GeoManager->ClearTracks();
-  Detector->top->Draw();
-  MW->GeometryWindow->PostDraw();
-  MW->GeometryWindow->UpdateRootCanvas();
+    DetectorAddOnsWindow::HighlightVolume(name);
+    MW->GeometryWindow->SetAsActiveRootWindow();
+    Detector->GeoManager->ClearTracks();
+    MW->GeometryWindow->ShowGeometry(true, false, false);
 }
 
 bool drawIfFound(TGeoNode* node, TString name)
@@ -488,23 +497,39 @@ void DetectorAddOnsWindow::OnrequestShowMonitor(const AGeoObject *mon)
         track->SetLineWidth(4);
         track->SetLineColor(kRed);
     }
-    MW->ShowTracks();
+    MW->GeometryWindow->DrawTracks();
 }
 
-void DetectorAddOnsWindow::HighlightVolume(QString VolName)
+void DetectorAddOnsWindow::HighlightVolume(const QString & VolName)
 {
-  TObjArray* list = Detector->GeoManager->GetListOfVolumes();
-  int size = list->GetEntries();
+    AGeoObject * obj = Detector->Sandwich->World->findObjectByName(VolName);
+    if (!obj) return;
 
-  for (int i=0; i<size; i++)
+    QSet<QString> set;
+    if (obj->ObjectType->isArray() || obj->ObjectType->isHandlingSet())
     {
-      TGeoVolume* vol = (TGeoVolume*)list->At(i);
-      if (!vol) break;
-      QString name = vol->GetName();
-//      qDebug()<<"name: "<<name;
-      if (name == VolName) vol->SetLineColor(kRed);
-//      if (name == VolName) vol->SetLineWidth(3);
-      else vol->SetLineColor(kGray);
+        QVector<AGeoObject*> vec;
+        obj->collectContainingObjects(vec);
+        for (AGeoObject * obj : vec)
+            set << obj->Name;
+    }
+    else
+        set << VolName;
+
+    TObjArray* list = Detector->GeoManager->GetListOfVolumes();
+    int size = list->GetEntries();
+
+    for (int iVol = 0; iVol < size; iVol++)
+    {
+        TGeoVolume* vol = (TGeoVolume*)list->At(iVol);
+        if (!vol) break;
+        const QString name = vol->GetName();
+        if (set.contains(name))
+        {
+            vol->SetLineColor(kRed);
+            vol->SetLineWidth(3);
+        }
+        else vol->SetLineColor(kGray);
     }
 }
 
@@ -529,20 +554,22 @@ void DetectorAddOnsWindow::on_pbUseScriptToAddObj_clicked()
     delete MW->GenScriptWindow; MW->GenScriptWindow = 0;
 
     AJavaScriptManager* jsm = new AJavaScriptManager(MW->Detector->RandGen);
-    MW->GenScriptWindow = new AScriptWindow(jsm, MW->GlobSet, true, this);
+    MW->GenScriptWindow = new AScriptWindow(jsm, true, this);
 
     QString example = "ClearAll()\nfor (var i=0; i<3; i++)\n Box('Test'+i, 10,5,2, 0, 'PrScint', (i-1)*20,i*2,-i*5,  0,0,0)";
     QString title = ( ObjectScriptTarget.isEmpty() ? "Add objects script" : QString("Add objects script. Script will be stored in object ") + ObjectScriptTarget );
     MW->GenScriptWindow->ConfigureForLightMode(&Detector->AddObjPositioningScript, title, example);
 
-    AddObjScriptInterface = new AInterfaceToAddObjScript(Detector);
-    MW->GenScriptWindow->SetInterfaceObject(AddObjScriptInterface);
+    AddObjScriptInterface = new AGeo_SI(Detector);
+    MW->GenScriptWindow->RegisterInterfaceAsGlobal(AddObjScriptInterface);
+    MW->GenScriptWindow->RegisterCoreInterfaces();
 
-    connect(AddObjScriptInterface, &AInterfaceToAddObjScript::AbortScriptEvaluation, this, &DetectorAddOnsWindow::ReportScriptError);
-    connect(AddObjScriptInterface, &AInterfaceToAddObjScript::requestShowCheckUpWindow, MW->CheckUpWindow, &CheckUpWindowClass::showNormal);
+    connect(AddObjScriptInterface, &AGeo_SI::AbortScriptEvaluation, this, &DetectorAddOnsWindow::ReportScriptError);
+    connect(AddObjScriptInterface, &AGeo_SI::requestShowCheckUpWindow, MW->CheckUpWindow, &CheckUpWindowClass::showNormal);
     connect(MW->GenScriptWindow, &AScriptWindow::success, this, &DetectorAddOnsWindow::AddObjScriptSuccess);
 
     MW->recallGeometryOfLocalScriptWindow();
+    MW->GenScriptWindow->UpdateGui();
     MW->GenScriptWindow->show();
 
 //  MW->extractGeometryOfLocalScriptWindow();
@@ -578,7 +605,7 @@ void DetectorAddOnsWindow::on_pbUseScriptToAddObj_clicked()
 //    MW->GenScriptWindow->SetTitle("Add objects script. Script will be stored in object "+ObjectScriptTarget);
 
 //  MW->GenScriptWindow->SetScript(&Detector->AddObjPositioningScript);
-//  MW->GenScriptWindow->SetStarterDir(MW->GlobSet->LibScripts);
+//  MW->GenScriptWindow->SetStarterDir(MW->GlobSet.LibScripts);
 //  connect(MW->GenScriptWindow, SIGNAL(success(QString)), this, SLOT(AddObjScriptSuccess()));
 //
 //  AddObjScriptInterface->GeoObjects.clear();
@@ -604,25 +631,16 @@ void DetectorAddOnsWindow::ReportScriptError(QString ErrorMessage)
 
 void DetectorAddOnsWindow::on_pbSaveTGeo_clicked()
 {
-  QString starter = MW->GlobSet->LastOpenDir;
+  QString starter = MW->GlobSet.LastOpenDir;
   QFileDialog *fileDialog = new QFileDialog;
   fileDialog->setDefaultSuffix("gdml");
-  QString fileName = fileDialog->getSaveFileName(this, "Export detector geometry", starter, "GDML files (*.gdml);;Root files (*.root)");
+  QString fileName = fileDialog->getSaveFileName(this, "Export detector geometry", starter, "GDML files (*.gdml)");
   if (fileName.isEmpty()) return;
-  MW->GlobSet->LastOpenDir = QFileInfo(fileName).absolutePath();
+  MW->GlobSet.LastOpenDir = QFileInfo(fileName).absolutePath();
 
-  QFileInfo fi(fileName);
-  if (fi.suffix().isEmpty()) fileName += ".gdml";
-  if (fi.suffix().compare("root") && fi.suffix().compare("gdml"))
-    {
-      message("Only ROOT and GDML files can be created!", this);
-      return;
-    }
+  QString err = Detector->exportToGDML(fileName);
 
-  QByteArray ba = fileName.toLocal8Bit();
-  const char *c_str = ba.data();
-  Detector->GeoManager->SetName("geometry");
-  Detector->GeoManager->Export(c_str);
+  if (!err.isEmpty()) message(err, this);
 }
 
 void ShowNodes(const TGeoNode* node, int level)
@@ -897,11 +915,41 @@ void readGeoObjectTree(AGeoObject* obj, const TGeoNode* node,
     }    
 }
 
+bool DetectorAddOnsWindow::GDMLtoTGeo(const QString& fileName)
+{
+    QString txt;
+    bool bOK = LoadTextFromFile(fileName, txt);
+    if (!bOK)
+    {
+        message("Cannot read the file", this);
+        return false;
+    }
+
+    if (txt.contains("unit=\"cm\"") || txt.contains("unit=\"m\""))
+    {
+        message("Cannot load GDML files with length units other than \"mm\"", this);
+        return false;
+    }
+
+    txt.replace("unit=\"mm\"", "unit=\"cm\"");
+    QString tmpFileName = MW->GlobSet.TmpDir + "/gdmlTMP.gdml";
+    bOK = SaveTextToFile(tmpFileName, txt);
+    if (!bOK)
+    {
+        message("Conversion failed - tmp file cannot be allocated", this);
+        return false;
+    }
+
+    Detector->GeoManager = TGeoManager::Import(tmpFileName.toLatin1());
+    QFile(tmpFileName).remove();
+    return true;
+}
+
 void DetectorAddOnsWindow::on_pmParseInGeometryFromGDML_clicked()
 {
-    QString fileName = QFileDialog::getOpenFileName(this, "Load GDML file", MW->GlobSet->LastOpenDir, "GDML files (*.gdml)");
+    QString fileName = QFileDialog::getOpenFileName(this, "Load GDML file", MW->GlobSet.LastOpenDir, "GDML files (*.gdml)");
     if (fileName.isEmpty()) return;
-    MW->GlobSet->LastOpenDir = QFileInfo(fileName).absolutePath();
+    MW->GlobSet.LastOpenDir = QFileInfo(fileName).absolutePath();
     QFileInfo fi(fileName);
     if (fi.suffix() != "gdml")
       {
@@ -909,12 +957,13 @@ void DetectorAddOnsWindow::on_pmParseInGeometryFromGDML_clicked()
         return;
       }
 
-    MW->Config->LoadConfig(MW->GlobSet->ExamplesDir + "/Empty.json");
+    MW->Config->LoadConfig(MW->GlobSet.ExamplesDir + "/Empty.json");
 
     QString PMtemplate = ui->lePMtemplate->text();
     if (Detector->GeoManager) delete Detector->GeoManager;
     Detector->GeoManager = 0;
-    Detector->GeoManager = TGeoManager::Import(fileName.toLatin1());
+    //Detector->GeoManager = TGeoManager::Import(fileName.toLatin1());
+    GDMLtoTGeo(fileName.toLatin1());
     if (!Detector->GeoManager || !Detector->GeoManager->IsClosed())
     {
         message("Load failed!", this);
@@ -1007,8 +1056,8 @@ void DetectorAddOnsWindow::on_pmParseInGeometryFromGDML_clicked()
     }
     else Detector->fWorldSizeFixed = false;
 
-    Detector->GeoManager->GetCurrentNavigator()->FindNode(0,0,0);
-    //qDebug() << "----------------------------"<<Detector->GeoManager->GetCurrentNavigator()->GetPath();
+    Detector->GeoManager->FindNode(0,0,0);
+    //qDebug() << "----------------------------"<<Detector->GeoManager->GetPath();
 
     Detector->writeToJson(MW->Config->JSON);
     //SaveJsonToFile(MW->Config->JSON, "D:/temp/CONFIGJSON.json");
@@ -1016,37 +1065,49 @@ void DetectorAddOnsWindow::on_pmParseInGeometryFromGDML_clicked()
     Detector->BuildDetector(); 
 }
 
-void DetectorAddOnsWindow::on_pbLoadTGeo_clicked()
+const QString DetectorAddOnsWindow::loadGDML(const QString& fileName, QString& gdml)
 {
-    QString fileName = QFileDialog::getOpenFileName(this, "Load GDML file", MW->GlobSet->LastOpenDir, "GDML files (*.gdml)");
-    if (fileName.isEmpty()) return;
-    MW->GlobSet->LastOpenDir = QFileInfo(fileName).absolutePath();
-
     QFileInfo fi(fileName);
     if (fi.suffix() != "gdml")
-      {
-        message("Only GDML files are accepted!", this);
-        return;
-      }
+        return "Only GDML files are accepted!";
 
     QFile f(fileName);
     if (!f.open(QFile::ReadOnly | QFile::Text))
-      {
-        message("Cannot open file!", this);
-        return;
-      }
+        return QString("Cannot open file %1").arg(fileName);
+
     QTextStream in(&f);
-    QString gdml = in.readAll();
+    gdml = in.readAll();
+
+    if (gdml.contains("unit=\"cm\"") || gdml.contains("unit=\"m\""))
+        return "Cannot load GDML files with length units other than \"mm\"";
+
+    gdml.replace("unit=\"mm\"", "unit=\"cm\"");
+    return "";
+}
+
+void DetectorAddOnsWindow::on_pbLoadTGeo_clicked()
+{
+    QString gdml;
+
+    QString fileName = QFileDialog::getOpenFileName(this, "Load GDML file", MW->GlobSet.LastOpenDir, "GDML files (*.gdml)");
+    if (fileName.isEmpty()) return;
+    MW->GlobSet.LastOpenDir = QFileInfo(fileName).absolutePath();
+
+    const QString err = loadGDML(fileName, gdml);
+    if (!err.isEmpty())
+    {
+        message(err, this);
+        return;
+    }
 
     //attempting to load and validity check
     bool fOK = Detector->importGDML(gdml);
-
     if (fOK)
-      {
+    {
         //qDebug() << "--> GDML successfully registered";
         MW->NumberOfPMsHaveChanged();
         MW->GeometryWindow->ShowGeometry();
-      }
+    }
     else message(Detector->ErrorString, this);
 
     MW->onGDMLstatusChage(fOK); //update MW GUI
@@ -1074,7 +1135,7 @@ void DetectorAddOnsWindow::on_pbCheckGeometry_clicked()
 
 void DetectorAddOnsWindow::on_cbAutoCheck_clicked(bool checked)
 {
-    MW->GlobSet->PerformAutomaticGeometryCheck = checked;
+    MW->GlobSet.PerformAutomaticGeometryCheck = checked;
     if (!checked) MW->CheckUpWindow->hide();
 }
 
@@ -1161,7 +1222,7 @@ void DetectorAddOnsWindow::on_pbRunTestParticle_clicked()
        }
 
        MW->GeometryWindow->ShowGeometry(false);
-       MW->ShowTracks();
+       MW->GeometryWindow->DrawTracks();
    }
 }
 
@@ -1193,7 +1254,7 @@ void DetectorAddOnsWindow::on_pbConvertToScript_clicked()
 
     AGeoObject* World = Detector->Sandwich->World;
 
-    objectMembersToScript(World, script, 2);
+    twGeo->objectMembersToScript(World, script, 2, true, true);
 
     script += "\n\n  geo.UpdateGeometry(true)";
 
@@ -1204,140 +1265,4 @@ void DetectorAddOnsWindow::on_pbConvertToScript_clicked()
     MW->ScriptWindow->showNormal();
     MW->ScriptWindow->raise();
     MW->ScriptWindow->activateWindow();
-}
-
-void DetectorAddOnsWindow::objectMembersToScript(AGeoObject* Master, QString &script, int ident)
-{
-    for (AGeoObject* obj : Master->HostedObjects)
-    {
-        if (obj->ObjectType->isLogical())
-        {
-            script += "\n" + QString(" ").repeated(ident)+ makeScriptString_basicObject(obj);
-        }
-        else if (obj->ObjectType->isCompositeContainer()) {} //nothing to do
-        else if (obj->ObjectType->isSlab() || obj->ObjectType->isSingle() )
-        {
-            script += "\n" + QString(" ").repeated(ident)+ makeScriptString_basicObject(obj);
-            script += "\n" + QString(" ").repeated(ident)+ makeLinePropertiesString(obj);
-            if (obj->ObjectType->isLightguide())
-            {
-                script += "\n";
-                script += "\n" + QString(" ").repeated(ident)+ "//=== Lightguide object is not supported! ===";
-                script += "\n";
-            }
-            objectMembersToScript(obj, script, ident + 2);            
-        }
-        else if (obj->ObjectType->isComposite())
-        {
-            script += "\n" + QString(" ").repeated(ident) + "//-->-- logical volumes for " + obj->Name;
-            objectMembersToScript(obj->getContainerWithLogical(), script, ident + 4);
-            script += "\n" + QString(" ").repeated(ident) + "//--<-- logical volumes end for " + obj->Name;
-
-            script += "\n" + QString(" ").repeated(ident)+ makeScriptString_basicObject(obj);
-            script += "\n" + QString(" ").repeated(ident)+ makeLinePropertiesString(obj);
-            objectMembersToScript(obj, script, ident + 2);
-        }
-        else if (obj->ObjectType->isArray())
-        {
-            script += "\n" + QString(" ").repeated(ident)+ makeScriptString_arrayObject(obj);
-            script += "\n" + QString(" ").repeated(ident)+ "//-->-- array elements for " + obj->Name;
-            objectMembersToScript(obj, script, ident + 2);
-            script += "\n" + QString(" ").repeated(ident)+ "//--<-- array elements end for " + obj->Name;
-        }
-        else if (obj->ObjectType->isStack())
-        {
-            script += "\n" + QString(" ").repeated(ident)+ makeScriptString_stackObjectStart(obj);
-            script += "\n" + QString(" ").repeated(ident)+ "//-->-- stack elements for " + obj->Name;
-            script += "\n" + QString(" ").repeated(ident)+ "// Values of x, y, z only matter for the stack element, refered to at InitializeStack below";
-            script += "\n" + QString(" ").repeated(ident)+ "// For the rest of elements they are calculated automatically";
-            objectMembersToScript(obj, script, ident + 2);
-            script += "\n" + QString(" ").repeated(ident)+ "//--<-- stack elements end for " + obj->Name;
-            if (!obj->HostedObjects.isEmpty())
-                script += "\n" + QString(" ").repeated(ident)+ makeScriptString_stackObjectEnd(obj);
-        }
-        else if (obj->ObjectType->isGroup())
-        {
-            script += "\n" + QString(" ").repeated(ident)+ makeScriptString_groupObjectStart(obj);
-            script += "\n" + QString(" ").repeated(ident)+ "//-->-- group elements for " + obj->Name;
-            objectMembersToScript(obj, script, ident + 2);
-            script += "\n" + QString(" ").repeated(ident)+ "//--<-- group elements end for " + obj->Name;
-        }
-        else if (obj->ObjectType->isGrid())
-        {
-            script += "\n";
-            script += "\n" + QString(" ").repeated(ident)+ "//=== Optical grid object is not supported! Make a request to the developers ===";
-            script += "\n";
-        }
-
-    }
-}
-
-QString DetectorAddOnsWindow::makeScriptString_basicObject(AGeoObject* obj)
-{
-    return  QString("geo.TGeo( ") +
-            "'" + obj->Name + "', " +
-            "'" + obj->Shape->getGenerationString() + "', " +
-            Detector->MpCollection->getMaterialName(obj->Material) + "_mat, " +  //QString::number(obj->Material) + ", " +
-            "'"+obj->Container->Name + "',   "+
-            QString::number(obj->Position[0]) + ", " +
-            QString::number(obj->Position[1]) + ", " +
-            QString::number(obj->Position[2]) + ",   " +
-            QString::number(obj->Orientation[0]) + ", " +
-            QString::number(obj->Orientation[1]) + ", " +
-            QString::number(obj->Orientation[2]) + " )";
-}
-
-QString DetectorAddOnsWindow::makeScriptString_arrayObject(AGeoObject *obj)
-{
-    ATypeArrayObject* a = dynamic_cast<ATypeArrayObject*>(obj->ObjectType);
-    if (!a)
-    {
-        qWarning() << "It is not an array!";
-        return "Error accessing object as array!";
-    }
-
-    return  QString("geo.Array( ") +
-            "'" + obj->Name + "', " +
-            QString::number(a->numX) + ", " +
-            QString::number(a->numY) + ", " +
-            QString::number(a->numZ) + ",   " +
-            QString::number(a->stepX) + ", " +
-            QString::number(a->stepY) + ", " +
-            QString::number(a->stepZ) + ", " +
-            "'" + obj->Container->Name + "',   " +
-            QString::number(obj->Position[0]) + ", " +
-            QString::number(obj->Position[1]) + ", " +
-            QString::number(obj->Position[2]) + ",   " +
-            QString::number(obj->Orientation[2]) + " )";
-}
-
-QString DetectorAddOnsWindow::makeScriptString_stackObjectStart(AGeoObject *obj)
-{
-    return  QString("geo.MakeStack(") +
-            "'" + obj->Name + "', " +
-            "'" + obj->Container->Name + "' )";
-}
-
-QString DetectorAddOnsWindow::makeScriptString_groupObjectStart(AGeoObject *obj)
-{
-    return  QString("geo.MakeGroup(") +
-            "'" + obj->Name + "', " +
-            "'" + obj->Container->Name + "' )";
-}
-
-QString DetectorAddOnsWindow::makeScriptString_stackObjectEnd(AGeoObject *obj)
-{
-    return QString("geo.InitializeStack( ") +
-           "'" + obj->Name + "',  " +
-           "'" + obj->HostedObjects.first()->Name + "' )";
-}
-
-QString DetectorAddOnsWindow::makeLinePropertiesString(AGeoObject *obj)
-{
-    return "geo.SetLine( '" +
-            obj->Name +
-            "',  " +
-            QString::number(obj->color) + ",  " +
-            QString::number(obj->width) + ",  " +
-            QString::number(obj->style) + " )";
 }

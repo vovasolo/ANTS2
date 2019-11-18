@@ -1,11 +1,13 @@
 #include "awebsocketserverdialog.h"
 #include "ui_awebsocketserverdialog.h"
 #include "mainwindow.h"
-#include "globalsettingsclass.h"
+#include "aglobalsettings.h"
 #include "anetworkmodule.h"
 #include "globalsettingswindowclass.h"
+#include "windownavigatorclass.h"
 
 #include <QDebug>
+#include <QHostAddress>
 
 AWebSocketServerDialog::AWebSocketServerDialog(MainWindow *MW) :
     QDialog(MW), MW(MW),
@@ -15,16 +17,16 @@ AWebSocketServerDialog::AWebSocketServerDialog(MainWindow *MW) :
     setWindowTitle("ANTS2 servers");
 
     updateNetGui();
-    QObject::connect(MW->GlobSet->NetModule, &ANetworkModule::StatusChanged, this, &AWebSocketServerDialog::updateNetGui);
-
-    QObject::connect(MW->GlobSet->NetModule, &ANetworkModule::ReportTextToGUI, this, &AWebSocketServerDialog::addText);
+    ANetworkModule* Net = MW->GlobSet.getNetworkModule();
+    QObject::connect(Net, &ANetworkModule::StatusChanged, this, &AWebSocketServerDialog::updateNetGui);
+    QObject::connect(Net, &ANetworkModule::ReportTextToGUI, this, &AWebSocketServerDialog::addText);
 }
 
-#include "windownavigatorclass.h"
 void AWebSocketServerDialog::updateNetGui()
 {
-  bool bW  = MW->GlobSet->NetModule->isWebSocketServerRunning();
-  bool bJ  = MW->GlobSet->NetModule->isRootServerRunning();
+  ANetworkModule* Net = MW->GlobSet.getNetworkModule();
+  bool bW  = Net->isWebSocketServerRunning();
+  bool bJ  = Net->isRootServerRunning();
   bool bbJ = false;
 #ifdef USE_ROOT_HTML
        bbJ = true;
@@ -59,22 +61,26 @@ AWebSocketServerDialog::~AWebSocketServerDialog()
 
 void AWebSocketServerDialog::on_pbStartWS_clicked()
 {
-    MW->GlobSet->NetModule->StartWebSocketServer(MW->GlobSet->DefaultWebSocketPort);
+    MW->GlobSet.getNetworkModule()->StartWebSocketServer(QHostAddress(MW->GlobSet.DefaultWebSocketIP), MW->GlobSet.DefaultWebSocketPort);
 }
 
 void AWebSocketServerDialog::on_pbStopWS_clicked()
 {
-    MW->GlobSet->NetModule->StopWebSocketServer();
+
+     MW->GlobSet.getNetworkModule()->StopWebSocketServer();
 }
 
+#include "amessage.h"
 void AWebSocketServerDialog::on_pbStartJSR_clicked()
 {
-    MW->GlobSet->NetModule->StartRootHttpServer(MW->GlobSet->DefaultRootServerPort, MW->GlobSet->ExternalJSROOT);  //does nothing if compilation flag is not set
+    bool bOK = MW->GlobSet.getNetworkModule()->StartRootHttpServer();  //does nothing if compilation flag is not set
+    if (!bOK)
+        message("Server failed to start listening.\nCheck if another server is already listening at this port.", this);
 }
 
 void AWebSocketServerDialog::on_pbStopJSR_clicked()
 {
-    MW->GlobSet->NetModule->StopRootHttpServer();
+    MW->GlobSet.getNetworkModule()->StopRootHttpServer();
 }
 
 void AWebSocketServerDialog::on_pbSettings_clicked()

@@ -4,9 +4,8 @@
 #include <QMainWindow>
 
 class MainWindow;
-class GlobalSettingsClass;
 class ANetworkModule;
-class AInterfaceToGStyleScript;
+class AGStyle_SI;
 
 namespace Ui {
   class GlobalSettingsWindowClass;
@@ -22,8 +21,12 @@ public:
 
   void updateGUI();
   void SetTab(int iTab);
+  void ShowNetSettings();
 
-  AInterfaceToGStyleScript* GStyleInterface = 0;  // if created -> owned by the script manager
+  AGStyle_SI* GStyleInterface = 0;  // if created -> owned by the script manager
+
+protected:
+    bool event(QEvent *event);
 
 public slots:
   void updateNetGui();
@@ -74,8 +77,6 @@ private slots:
 
   void on_sbNumSegments_editingFinished();
 
-  void on_sbMaxNumTracks_editingFinished();
-
   void on_sbNumPointsFunctionX_editingFinished();
 
   void on_sbNumPointsFunctionY_editingFinished();
@@ -98,18 +99,33 @@ private slots:
 
   void on_leJSROOT_editingFinished();
 
-  void on_cbAutoRunWebSocketServer_clicked();
-
   void on_cbRunWebSocketServer_clicked(bool checked);
 
   void on_cbRunRootServer_clicked(bool checked);
 
+  void on_leWebSocketIP_editingFinished();
+
+  void on_cbRunWebSocketServer_toggled(bool checked);
+
+  void on_cbSaveSimAsText_IncludeNumPhotons_clicked(bool checked);
+
+  void on_cbSaveSimAsText_IncludePositions_clicked(bool checked);
+
+  void on_pbGeant4exec_clicked();
+
+  void on_leGeant4exec_editingFinished();
+
+  void on_pbGeant4ExchangeFolder_clicked();
+
+  void on_leGeant4ExchangeFolder_editingFinished();
+
+  void on_leLibLogs_editingFinished();
+
+  void on_pbChooseLogsLib_clicked();
+
 private:
   Ui::GlobalSettingsWindowClass *ui;
-
   MainWindow* MW;
-  GlobalSettingsClass* GlobSet; //just an alias, read from MW
-
 };
 
 #endif // GLOBALSETTINGSWINDOWCLASS_H

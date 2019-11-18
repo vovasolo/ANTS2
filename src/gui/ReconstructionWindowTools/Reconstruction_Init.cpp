@@ -24,8 +24,8 @@
 #include "TEllipse.h"
 #include "TPolyLine.h"
 
-ReconstructionWindow::ReconstructionWindow(QWidget *parent, MainWindow *mw, EventsDataClass* eventsDataHub) :
-  QMainWindow(parent),
+ReconstructionWindow::ReconstructionWindow(QWidget * parent, MainWindow * mw, EventsDataClass * eventsDataHub) :
+  AGuiWindow(parent),
   ui(new Ui::ReconstructionWindow)
 {
   MW = mw;
@@ -62,6 +62,7 @@ ReconstructionWindow::ReconstructionWindow(QWidget *parent, MainWindow *mw, Even
 
   Qt::WindowFlags windowFlags = (Qt::Window | Qt::CustomizeWindowHint);
   windowFlags |= Qt::WindowCloseButtonHint;
+  windowFlags |= Qt::Tool;
   this->setWindowFlags( windowFlags );
 
   ForbidUpdate = false;  
@@ -83,10 +84,10 @@ ReconstructionWindow::ReconstructionWindow(QWidget *parent, MainWindow *mw, Even
   funcParams[2] = 1.0;
   funcParams[3] = 1.0;
 
-  RedIcon = createColorCircleIcon(ui->twOptions->iconSize(), Qt::red);
+  RedIcon = GuiUtils::createColorCircleIcon(ui->twOptions->iconSize(), Qt::red);
   ui->labDataIsMissing->setPixmap(RedIcon.pixmap(16,16));
   ui->fNoData->setVisible(true);
-  YellowIcon = createColorCircleIcon(ui->twData->iconSize(), Qt::yellow);
+  YellowIcon = GuiUtils::createColorCircleIcon(ui->twData->iconSize(), Qt::yellow);
   ui->labUnassignedIcon->setPixmap(YellowIcon.pixmap(16,16));
   ui->fNotAssignedPMs->setVisible(false);
 
@@ -99,7 +100,8 @@ ReconstructionWindow::ReconstructionWindow(QWidget *parent, MainWindow *mw, Even
 
   QList<QWidget*> invis;
   invis << ui->pbUpdateFilters << ui->pbSpF_UpdateTable << ui->pbUpdateGainsIndication << ui->pbCorrUpdateTMP << ui->fDynPassive
-        << ui->fShowXYPmnumber << ui->pbKNNupdate << ui->pbUpdateReconConfig << ui->labLRFmoduleWarning << ui->pbUpdateGuiSettingsInJSON;
+        << ui->fShowXYPmnumber << ui->pbKNNupdate << ui->pbUpdateReconConfig << ui->labLRFmoduleWarning << ui->pbUpdateGuiSettingsInJSON
+        << ui->pbRootConfigureCustom;
   for (auto w: invis) w->setVisible(false);
 
   QList<QWidget*> disab;

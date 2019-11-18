@@ -1,5 +1,5 @@
 #include "asandwich.h"
-#include "slab.h"
+#include "aslab.h"
 #include "ageoobject.h"
 #include "amaterialparticlecolection.h"
 #include "ajsontools.h"
@@ -38,6 +38,9 @@ void ASandwich::clearWorld()
     for (int i=0; i<World->HostedObjects.size(); i++)
         World->HostedObjects[i]->clearAll();
     World->HostedObjects.clear();
+
+    clearGridRecords();
+    clearMonitorRecords();
 }
 
 void ASandwich::appendSlab(ASlabModel *slab)
@@ -245,7 +248,7 @@ void ASandwich::convertObjToGrid(AGeoObject *obj)
   elObj->updateGridElementShape();
 }
 
-void ASandwich::shapeGrid(AGeoObject *obj, int shape, double p0, double p1, double p2)
+void ASandwich::shapeGrid(AGeoObject *obj, int shape, double p0, double p1, double p2, int wireMat)
 {
     //qDebug() << "Grid shape request:"<<shape<<p0<<p1<<p2;
     if (!obj) return;
@@ -255,9 +258,6 @@ void ASandwich::shapeGrid(AGeoObject *obj, int shape, double p0, double p1, doub
     if (!GEobj) return;
     ATypeGridElementObject* GE = static_cast<ATypeGridElementObject*>(GEobj->ObjectType);
 
-    int previousMat = 0;
-    if (!GEobj->HostedObjects.isEmpty())
-        previousMat = GEobj->HostedObjects.first()->Material;
     //clear anything which is inside grid element
     for (int i=GEobj->HostedObjects.size()-1; i>-1; i--)
     {
@@ -279,14 +279,14 @@ void ASandwich::shapeGrid(AGeoObject *obj, int shape, double p0, double p1, doub
         AGeoObject* w = new AGeoObject(new ATypeSingleObject(), new AGeoTubeSeg(0, 0.5*p2, 0.5*p1, 90, 270));
         w->Position[0] = 0.5*p0;
         w->Orientation[1] = 90;
-        w->Material = previousMat;
+        w->Material = wireMat;
         do w->Name = AGeoObject::GenerateRandomObjectName();
         while (World->isNameExists(w->Name));
         GEobj->addObjectFirst(w);
         w = new AGeoObject(new ATypeSingleObject(), new AGeoTubeSeg(0, 0.5*p2, 0.5*p1, -90, 90));
         w->Position[0] = -0.5*p0;
         w->Orientation[1] = 90;
-        w->Material = previousMat;
+        w->Material = wireMat;
         do w->Name = AGeoObject::GenerateRandomObjectName();
         while (World->isNameExists(w->Name));
         GEobj->addObjectFirst(w);
@@ -298,7 +298,7 @@ void ASandwich::shapeGrid(AGeoObject *obj, int shape, double p0, double p1, doub
         do com->Name = AGeoObject::GenerateRandomCompositeName();
         while (World->isNameExists(com->Name));
         convertObjToComposite(com);
-        com->Material = previousMat;
+        com->Material = wireMat;
         AGeoObject* logicals = com->getContainerWithLogical();
         for (int i=0; i<logicals->HostedObjects.size(); i++)
           delete logicals->HostedObjects[i];
@@ -311,7 +311,7 @@ void ASandwich::shapeGrid(AGeoObject *obj, int shape, double p0, double p1, doub
         w1->Shape = new AGeoTubeSeg(0, 0.5*p2, 0.5*p1, -90, 90);
         w1->Position[0] = -0.5*p0;
         w1->Orientation[1] = 90;
-        w1->Material = previousMat;
+        w1->Material = wireMat;
         logicals->addObjectFirst(w1);
 
         AGeoObject* w2 = new AGeoObject();
@@ -321,7 +321,7 @@ void ASandwich::shapeGrid(AGeoObject *obj, int shape, double p0, double p1, doub
         w2->Shape = new AGeoTubeSeg(0, 0.5*p2, 0.5*p1, 90, 270);
         w2->Position[0] = 0.5*p0;
         w2->Orientation[1] = 90;
-        w2->Material = previousMat;
+        w2->Material = wireMat;
         logicals->addObjectLast(w2);
 
         AGeoObject* w3 = new AGeoObject();
@@ -332,7 +332,7 @@ void ASandwich::shapeGrid(AGeoObject *obj, int shape, double p0, double p1, doub
         w3->Position[1] = 0.5*p1;
         w3->Orientation[0] = 90;
         w3->Orientation[1] = 90;
-        w3->Material = previousMat;
+        w3->Material = wireMat;
         logicals->addObjectLast(w3);
 
         AGeoObject* w4 = new AGeoObject();
@@ -343,7 +343,7 @@ void ASandwich::shapeGrid(AGeoObject *obj, int shape, double p0, double p1, doub
         w4->Position[1] = -0.5*p1;
         w4->Orientation[0] = 90;
         w4->Orientation[1] = 90;
-        w4->Material = previousMat;
+        w4->Material = wireMat;
         logicals->addObjectLast(w4);
 
         AGeoComposite* comSh = static_cast<AGeoComposite*>(com->Shape);
@@ -362,7 +362,7 @@ void ASandwich::shapeGrid(AGeoObject *obj, int shape, double p0, double p1, doub
         do com->Name = AGeoObject::GenerateRandomCompositeName();
         while (World->isNameExists(com->Name));
         convertObjToComposite(com);
-        com->Material = previousMat;
+        com->Material = wireMat;
         AGeoObject* logicals = com->getContainerWithLogical();
         for (int i=0; i<logicals->HostedObjects.size(); i++)
           delete logicals->HostedObjects[i];
@@ -382,7 +382,7 @@ void ASandwich::shapeGrid(AGeoObject *obj, int shape, double p0, double p1, doub
         w1->Shape = new AGeoTrd1( 0.5*d, 0.5*dd, 0.5*p2, 0.5*delta );
         w1->Position[1] = 0.5*p0 - 0.5*delta;
         w1->Orientation[1] = 90;
-        w1->Material = previousMat;
+        w1->Material = wireMat;
         logicals->addObjectFirst(w1);
 
         AGeoObject* w2 = new AGeoObject();
@@ -393,7 +393,7 @@ void ASandwich::shapeGrid(AGeoObject *obj, int shape, double p0, double p1, doub
         w2->Position[1] = -0.5*p0 + 0.5*delta;
         w2->Orientation[0] = 180;
         w2->Orientation[1] = 90;
-        w2->Material = previousMat;
+        w2->Material = wireMat;
         logicals->addObjectFirst(w2);
 
         AGeoObject* w3 = new AGeoObject();
@@ -405,7 +405,7 @@ void ASandwich::shapeGrid(AGeoObject *obj, int shape, double p0, double p1, doub
         w3->Position[1] = 0.5*(0.5*p0 - 0.5*delta);
         w3->Orientation[0] = 60;
         w3->Orientation[1] = 90;
-        w3->Material = previousMat;
+        w3->Material = wireMat;
         logicals->addObjectFirst(w3);
 
         AGeoObject* w4 = new AGeoObject();
@@ -417,7 +417,7 @@ void ASandwich::shapeGrid(AGeoObject *obj, int shape, double p0, double p1, doub
         w4->Position[1] = 0.5*(0.5*p0 - 0.5*delta);
         w4->Orientation[0] = -60;
         w4->Orientation[1] = 90;
-        w4->Material = previousMat;
+        w4->Material = wireMat;
         logicals->addObjectFirst(w4);
 
         AGeoObject* w5 = new AGeoObject();
@@ -429,7 +429,7 @@ void ASandwich::shapeGrid(AGeoObject *obj, int shape, double p0, double p1, doub
         w5->Position[1] = -0.5*(0.5*p0 - 0.5*delta);
         w5->Orientation[0] = 120;
         w5->Orientation[1] = 90;
-        w5->Material = previousMat;
+        w5->Material = wireMat;
         logicals->addObjectFirst(w5);
 
         AGeoObject* w6 = new AGeoObject();
@@ -441,7 +441,7 @@ void ASandwich::shapeGrid(AGeoObject *obj, int shape, double p0, double p1, doub
         w6->Position[1] = -0.5*(0.5*p0 - 0.5*delta);
         w6->Orientation[0] = -120;
         w6->Orientation[1] = 90;
-        w6->Material = previousMat;
+        w6->Material = wireMat;
         logicals->addObjectFirst(w6);
 
         AGeoComposite* comSh = static_cast<AGeoComposite*>(com->Shape);
@@ -493,7 +493,7 @@ void ASandwich::addTGeoVolumeRecursively(AGeoObject* obj, TGeoVolume* parent, TG
         if (obj->ObjectType->isMonitor())
           {
             if (obj->Container)
-              iMat = obj->Container->Material;
+              iMat = obj->Container->getMaterial();
             else qWarning() << "Monitor without container detected!";
             //qDebug() << "Monitor:"<<obj->Name<<"mat:"<<iMat;
           }
@@ -554,18 +554,27 @@ void ASandwich::addTGeoVolumeRecursively(AGeoObject* obj, TGeoVolume* parent, TG
 
         //positioning node
         if (obj->ObjectType->isGrid())
-          {
+        {
             int GridCounter = GridRecords.size();
             GridRecords.append(obj->createGridRecord());
             parent->AddNode(vol, GridCounter, lTrans);            
-          }
+        }
         else if (obj->ObjectType->isMonitor())
-          {
+        {
             int MonitorCounter = MonitorsRecords.size();
             MonitorsRecords.append(obj);
             (static_cast<ATypeMonitorObject*>(obj->ObjectType))->index = MonitorCounter;
             parent->AddNode(vol, MonitorCounter, lTrans);
-          }
+
+            MonitorIdNames.append(QString("%1_%2").arg(vol->GetName()).arg(MonitorCounter));
+
+            TObjArray * nList = parent->GetNodes();
+            int numNodes = nList->GetEntries();
+            TGeoNode * node = (TGeoNode*)nList->At(numNodes-1);
+            //qDebug() << nList << numNodes;
+            //qDebug() << "      " <<node;//->GetUniqueID();
+            MonitorNodes.append(node);
+        }
         else parent->AddNode(vol, forcedNodeNumber, lTrans);
     }    
 
@@ -655,7 +664,9 @@ void ASandwich::clearGridRecords()
 
 void ASandwich::clearMonitorRecords()
 {
-    MonitorsRecords.clear(); //dno delete - it is just pointers to world tree objects
+    MonitorsRecords.clear(); //dont delete - it is just pointers to world tree objects
+    MonitorIdNames.clear();
+    MonitorNodes.clear();
 }
 
 void ASandwich::positionArrayElement(int ix, int iy, int iz, AGeoObject* el, AGeoObject* arrayObj,
@@ -796,7 +807,7 @@ bool ASandwich::CalculateZofSlabs()
   LastError = "";
 
   // find the Z=0 slab
-  int iZeroSlab;
+  int iZeroSlab = 0;
   int FoundActiveLayers = 0;
   int i;
   for (i=0; i<World->HostedObjects.size(); i++)
@@ -891,7 +902,12 @@ void ASandwich::DeleteMaterial(int imat)
 
 bool ASandwich::isVolumeExist(QString name)
 {
-   return (World->findObjectByName(name) != 0);
+    return (World->findObjectByName(name) != 0);
+}
+
+void ASandwich::changeLineWidthOfVolumes(int delta)
+{
+    World->changeLineWidthRecursive(delta);
 }
 
 void ASandwich::writeToJson(QJsonObject &json)
@@ -1289,8 +1305,8 @@ void ASandwich::importOldGrid(QJsonObject &json)
 
     switch (Type)
     {
-    case 0: shapeGrid(gr, 0, Pitch, SizeY, Diameter); break;
-    case 1: shapeGrid(gr, 1, Pitch, Pitch, Diameter); break;
+    case 0: shapeGrid(gr, 0, Pitch, SizeY, Diameter, 0); break; //mat control?
+    case 1: shapeGrid(gr, 1, Pitch, Pitch, Diameter, 0); break;
     default:
         qWarning() << "Unknown grid type!";
     }

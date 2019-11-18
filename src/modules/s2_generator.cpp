@@ -30,7 +30,7 @@ S2_Generator::S2_Generator(Photon_Generator *photonGenerator, APhotonTracer *pho
 
 bool S2_Generator::Generate() //uses MW->EnergyVector as the input parameter
 {
-    if (EnergyVector->isEmpty()) return false; //no data
+    if (EnergyVector->isEmpty()) return true; //no deposition data -> no secondary to generate
 
     double Remainer = 0.0;
     double ElRemainer = 0.0;
@@ -118,8 +118,10 @@ bool S2_Generator::Generate() //uses MW->EnergyVector as the input parameter
             GeoManager->SetCurrentDirection(0,0,1.);  //up
             GeoManager->FindNextBoundaryAndStep();
             double Step = GeoManager->GetStep();
-            double DriftVelocity = 0.01 * (*MaterialCollection)[ThisMatIndex]->e_driftVelocity;//given in cm/us - need in mm/ns
-            time += Step / DriftVelocity;
+            //double DriftVelocity = 0.01 * (*MaterialCollection)[ThisMatIndex]->e_driftSpeed;//given in cm/us - need in mm/ns
+            double DriftVelocity = MaterialCollection->getDriftSpeed(ThisMatIndex);
+            if (DriftVelocity != 0)
+                time += Step / DriftVelocity;
             VolName = GeoManager->GetCurrentVolume()->GetName();
 //            qDebug()<<"Found new volume: "<<VolName<<" drifted: "<<Step<<"new time: "<<time;          
             if (GeoManager->IsOutside()) break;
@@ -171,7 +173,8 @@ bool S2_Generator::Generate() //uses MW->EnergyVector as the input parameter
                          continue;
                        }
 
-                     PhotonGenerator->GenerateWaveTime(&Photon, MatIndexSecScint);
+                     PhotonGenerator->GenerateWave(&Photon, MatIndexSecScint);
+                     PhotonGenerator->GenerateTime(&Photon, MatIndexSecScint);
     //                 qDebug()<<time + z / DriftVelocity;
                      PhotonTracker->TracePhoton(&Photon);
                    }

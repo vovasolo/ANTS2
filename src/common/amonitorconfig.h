@@ -19,7 +19,9 @@ public:
     //particle specific
     int    ParticleIndex = 0;
     bool   bPrimary = true;
-    bool   bSecondary = false;
+    bool   bSecondary = true;
+    bool   bDirect = true;
+    bool   bIndirect = true;
 
     //histogram properties
     int    xbins = 100;
@@ -30,16 +32,16 @@ public:
     int    angleBins = 100;
     double angleFrom = 0;
     double angleTo = 90.0;
-    int    waveBins = 100;
-    double waveFrom = 0;
-    double waveTo = 0;
+    int    waveBins = 150;
+    double waveFrom = -1;
+    double waveTo = 148;
     int    energyBins = 100;
     double energyFrom = 0;
     double energyTo = 0;
     int    energyUnitsInHist = 2; // 0,1,2,3 -> meV, eV, keV, MeV;
 
-    void writeToJson(QJsonObject &json);
-    void readFromJson(QJsonObject &json);
+    void writeToJson(QJsonObject & json) const;
+    void readFromJson(const QJsonObject & json);
 };
 
 #endif // AMONITORCONFIG_H

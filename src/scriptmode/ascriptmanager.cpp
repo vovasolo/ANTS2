@@ -1,10 +1,16 @@
 #include "ascriptmanager.h"
 #include "ascriptinterface.h"
-#include "ainterfacetomessagewindow.h"
+#include "ascriptinterface.h"
+
+#ifdef GUI
+#include "amsg_si.h"
+#endif
 
 #include <QDebug>
 #include <QElapsedTimer>
 #include <QMetaMethod>
+
+#include "TRandom2.h"
 
 AScriptManager::AScriptManager(TRandom2 *RandGen) : RandGen(RandGen)
 {
@@ -23,13 +29,16 @@ AScriptManager::~AScriptManager()
   interfaces.clear();
 
   delete timer;
+
+  if (bOwnRandomGen) delete RandGen;
 }
 
+#ifdef GUI
 void AScriptManager::hideMsgDialogs()
 {
   for (int i=0; i<interfaces.size(); i++)
   {
-      AInterfaceToMessageWindow* t = dynamic_cast<AInterfaceToMessageWindow*>(interfaces[i]);
+      AMsg_SI* t = dynamic_cast<AMsg_SI*>(interfaces[i]);
       if (t)  t->HideWidget();
     }
 }
@@ -38,10 +47,24 @@ void AScriptManager::restoreMsgDialogs()
 {
   for (int i=0; i<interfaces.size(); i++)
   {
-      AInterfaceToMessageWindow* t = dynamic_cast<AInterfaceToMessageWindow*>(interfaces[i]);
+      AMsg_SI* t = dynamic_cast<AMsg_SI*>(interfaces[i]);
       if (t) t->RestorelWidget();
   }
 }
+
+void AScriptManager::deleteMsgDialogs()
+{
+  for (int i=0; i<interfaces.size(); i++)
+  {
+      AMsg_SI* t = dynamic_cast<AMsg_SI*>(interfaces[i]);
+      if (t)
+      {
+          // *** !!! t->deleteDialog(); //need by GenScriptWindow ?
+          return;
+      }
+  }
+}
+#endif
 
 qint64 AScriptManager::getElapsedTime()
 {
@@ -98,19 +121,6 @@ const QString AScriptManager::getFunctionReturnType(const QString &UnitFunction)
   return returnType;
 }
 
-void AScriptManager::deleteMsgDialogs()
-{
-  for (int i=0; i<interfaces.size(); i++)
-  {
-      AInterfaceToMessageWindow* t = dynamic_cast<AInterfaceToMessageWindow*>(interfaces[i]);
-      if (t)
-      {
-          // *** !!! t->deleteDialog(); //need by GenScriptWindow ?
-          return;
-      }
-  }
-}
-
 void AScriptManager::ifError_AbortAndReport()
 {
     if (isUncaughtException())
@@ -145,7 +155,7 @@ void AScriptManager::AbortEvaluation(QString message)
       if (bi) bi->ForceStop();
     }
 
-  if (!message.isEmpty())
+  if (!message.isEmpty() && bShowAbortMessageInOutput)
   {
       message = "<font color=\"red\">"+ message +"</font><br>";
       emit showMessage(message);

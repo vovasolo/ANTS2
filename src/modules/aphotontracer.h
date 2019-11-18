@@ -2,7 +2,10 @@
 #define APHOTONTRACER_H
 
 #include "aphotonhistorylog.h"
+
 #include <QVector>
+#include <vector>
+
 #include "TMathBase.h"
 
 class APhoton;
@@ -17,6 +20,7 @@ class TrackHolderClass;
 class TRandom2;
 class TGeoVolume;
 class AGridElementRecord;
+class ATracerStateful;
 
 class APhotonTracer
 {
@@ -29,13 +33,17 @@ public:
     ~APhotonTracer();
 
     void UpdateGeoManager(TGeoManager* NewGeoManager) {GeoManager = NewGeoManager;}//will be obsolete with new simulation system soon
-    void configure(const GeneralSimSettings *simSet, AOneEvent* oneEvent, bool fBuildTracks, QVector<TrackHolderClass *> *tracks);
+    void configure(const GeneralSimSettings *simSet, AOneEvent* oneEvent, bool fBuildTracks, std::vector<TrackHolderClass *> * tracks);
 
     void TracePhoton(const APhoton* Photon);
 
     AOneEvent* getEvent() {return OneEvent;}  //only used in LRF-based sim
 
-private:    
+    void setMaxTracks(int maxTracks) {MaxTracks = maxTracks;}
+
+    void hardAbort(); //before using it, give a chance to finish normally using abort at higher levels
+
+private:
     TRandom2* RandGen;
     TGeoManager* GeoManager;
     TGeoNavigator *navigator;    
@@ -43,9 +51,13 @@ private:
     APmHub* PMs;
     const QList<AGridElementRecord*>* grids;
     AOneEvent* OneEvent; //PM signals for this event are collected here
-    QVector<TrackHolderClass*>* Tracks;
+    std::vector<TrackHolderClass *> * Tracks;
     TrackHolderClass* track;
     QVector<APhotonHistoryLog> PhLog;
+    ATracerStateful* ResourcesForOverrides;
+
+    int MaxTracks = 10;
+    int PhotonTracksAdded = 0;
 
     int Counter; //number of photon transitions - there is a limit on this set by user
     APhoton* p; //the photon which is traced
@@ -69,6 +81,8 @@ private:
 
     QString nameFrom;
     QString nameTo;
+
+    bool bAbort = false;
 
     enum AbsRayEnum {AbsRayNotTriggered=0, AbsTriggered, RayTriggered, WaveShifted};
     inline AbsRayEnum AbsorptionAndRayleigh();

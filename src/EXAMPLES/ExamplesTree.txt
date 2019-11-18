@@ -1,24 +1,28 @@
 define:Gamma cameras
 define:Neutrons
 define:Dark matter
+define:Neutrinos
 define:ANTS2 tests
 define: Startup
 
 -------
 
-define:Gamma cameras :SiPM-based
-define:Gamma  cameras:PMT-based
+define:Gamma cameras:SiPM-based
+define:Gamma cameras:PMT-based
 
 define:Neutrons:Gas
 define:Neutrons:Converter
+define:Neutrons:Anger
 
-define:Dark matter:RED
 define:Dark matter:LUX
+
+define:Neutrinos:RED
 
 define:ANTS2 tests:Fresnel test
 define:ANTS2 tests:Scatter model
 define:ANTS2 tests:Optical grids
 define:ANTS2 tests:WavelengthShifters
+define:ANTS2 tests:NCrystal
 
 define:Startup:Startup
 
@@ -30,6 +34,7 @@ add:ANTS2 tests:Optical grids:OpticalGridTester.json:Detector with optical grids
 add:ANTS2 tests:WavelengthShifters:BulkWavelengthShifter.json:Detector with a bulk wavelength shifter. Run simulations with enabled/disabled WavelengthShifter object and check the wavelength distribution of the detected photons.
 add:ANTS2 tests:WavelengthShifters:SurfaceWavelengthShifter.json:Detector with a surface wavelength shifter. Note that for more complex behavior (e.g. scattering/reflection on original wavelength) bulk waveshifters should be used.
 add:ANTS2 tests:WavelengthShifters:WavelengthShiftingFibers.json:A detector concept based on Wavelength Shifting Fibers. Simplest possible way to configure - just two wavelengths.
+add:ANTS2 tests:NCrystal:NCrystal_AlPlate.json:Al plate and two monitors. ANTS2 has to be compiled with NCrystal support!
 
 add:Gamma cameras:SiPM-based:NewGenSiPM64.json:30x30x2 mm3 LYSO crystal with 8 x 8 SiPMs; NaturalLYSO, Co-57 and Na-22 sources
 add:Gamma cameras:SiPM-based:SiPM_64cross.json:30x30x5 mm3 LYSO crystal with 4 x 16-elements SensL SiPMs, ceramic holders; NaturalLYSO, Co-57 and Na-22 sources
@@ -39,7 +44,12 @@ add:Gamma cameras:SiPM-based:SiPM_16.json:30x30x5 mm3 LYSO crystal with 16 PMTs 
 add:Gamma cameras:PMT-based:Med37.json:Medical gamma camera GE MaxiCamera 400T; Na-22 and Co-57 sources
 
 add:Neutrons:Gas:AngerGSPC19.json:GSPC19 detector
-add:Neutrons:Converter:B4C_multigap.json:Multigap RPC neutron detector
+add:Neutrons:Converter:B10RPC-1hd.json:Boron-10 hybrid double-gap RPC
+add:Neutrons:Converter:B10RPC-10hd.json:Boron-10 hybrid double-gap RPC with 20 converter layers (10 double gaps)
+add:Neutrons:Anger:dSiPMcam.json:Prototype of a neutron Anger camera with GS20 scintillator and digital SiPMs
+
+add:Dark matter:LUX:LUX.json:A model of LUX - a dual-phase detector for dark matter search 
+add:Neutrinos:RED:RED100.json:A model of RED100 - a dual-phase neutrino detector
 
 add:Startup:Startup:StartupDetector.json:Detector loaded on start of ANTS2
 add:Startup:Startup:Simplest.json:Nearly empty detector
